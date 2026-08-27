@@ -1,0 +1,55 @@
+{
+  "name": "agentic-qa",
+  "version": "0.1.0",
+  "description": "An open-source foundation for autonomous web application quality assurance.",
+  "type": "module",
+  "bin": {
+    "agentic-qa": "dist/cli/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "inspect": "tsx src/cli/index.ts inspect"
+  },
+  "keywords": [
+    "qa",
+    "testing",
+    "playwright",
+    "automation",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zarmih/agentic-qa.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zarmih/agentic-qa/issues"
+  },
+  "homepage": "https://github.com/zarmih/agentic-qa#readme",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^15.0.0",
+    "picocolors": "^1.1.1",
+    "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.0",
+    "tsx": "^4.23.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  }
+}
