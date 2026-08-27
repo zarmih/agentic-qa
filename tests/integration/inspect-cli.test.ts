@@ -3,9 +3,9 @@ import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { InspectionResult } from '../../src/domain/inspection.js';
+import { runCli } from '../helpers/run-cli.js';
 
 const projectRoot = resolve(import.meta.dirname, '../..');
 let baseUrl = '';
@@ -39,30 +39,10 @@ afterAll(async () => {
   await rm(temporaryDirectory, { recursive: true, force: true });
 });
 
-function runCli(
-  arguments_: readonly string[],
-): Promise<{ code: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, ['--import', 'tsx', 'src/cli/index.ts', ...arguments_], {
-      cwd: projectRoot,
-      env: { ...process.env, NO_COLOR: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8').on('data', (chunk: string) => (stdout += chunk));
-    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (stderr += chunk));
-    child.on('error', reject);
-    child.on('close', (code) => {
-      resolvePromise({ code, stdout, stderr });
-    });
-  });
-}
-
 describe('agentic-qa inspect', () => {
   it('inspects a controlled page through the real CLI and writes artifacts', async () => {
     const artifacts = join(temporaryDirectory, 'runs');
-    const execution = await runCli([
+    const execution = await runCli(projectRoot, [
       'inspect',
       baseUrl,
       '--artifacts-dir',

@@ -10,6 +10,9 @@ describe('loadConfig', () => {
       headless: true,
       viewport: { width: 1440, height: 900 },
       artifactsDirectory: resolve('/workspace', 'artifacts'),
+      maxPages: 25,
+      maxDepth: 3,
+      maxQueryVariantsPerPath: 5,
     });
   });
 
@@ -22,6 +25,9 @@ describe('loadConfig', () => {
           AGENTIC_QA_VIEWPORT_WIDTH: '1280',
           AGENTIC_QA_VIEWPORT_HEIGHT: '720',
           AGENTIC_QA_ARTIFACTS_DIR: 'output',
+          AGENTIC_QA_MAX_PAGES: '20',
+          AGENTIC_QA_MAX_DEPTH: '2',
+          AGENTIC_QA_MAX_QUERY_VARIANTS_PER_PATH: '4',
         },
         '/workspace',
       ),
@@ -30,6 +36,9 @@ describe('loadConfig', () => {
       headless: false,
       viewport: { width: 1280, height: 720 },
       artifactsDirectory: resolve('/workspace', 'output'),
+      maxPages: 20,
+      maxDepth: 2,
+      maxQueryVariantsPerPath: 4,
     });
   });
 
@@ -37,11 +46,21 @@ describe('loadConfig', () => {
     const config = loadConfig(
       { AGENTIC_QA_NAVIGATION_TIMEOUT_MS: '5000', AGENTIC_QA_HEADLESS: 'true' },
       '/workspace',
-      { timeout: '9000', headed: true, artifactsDirectory: '/tmp/runs' },
+      {
+        timeout: '9000',
+        headed: true,
+        artifactsDirectory: '/tmp/runs',
+        maxPages: '12',
+        maxDepth: '0',
+        maxQueryVariantsPerPath: '3',
+      },
     );
     expect(config.navigationTimeoutMs).toBe(9000);
     expect(config.headless).toBe(false);
     expect(config.artifactsDirectory).toBe('/tmp/runs');
+    expect(config.maxPages).toBe(12);
+    expect(config.maxDepth).toBe(0);
+    expect(config.maxQueryVariantsPerPath).toBe(3);
   });
 
   it.each([
@@ -49,6 +68,9 @@ describe('loadConfig', () => {
     ['AGENTIC_QA_VIEWPORT_WIDTH', '-1'],
     ['AGENTIC_QA_VIEWPORT_HEIGHT', 'wide'],
     ['AGENTIC_QA_HEADLESS', 'sometimes'],
+    ['AGENTIC_QA_MAX_PAGES', '0'],
+    ['AGENTIC_QA_MAX_DEPTH', '-1'],
+    ['AGENTIC_QA_MAX_QUERY_VARIANTS_PER_PATH', '101'],
   ])('rejects invalid %s', (key, value) => {
     expect(() => loadConfig({ [key]: value }, '/workspace')).toThrow(ConfigurationError);
   });
