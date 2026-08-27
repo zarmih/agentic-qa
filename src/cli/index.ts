@@ -16,9 +16,13 @@ interface InspectCommandOptions {
 }
 
 interface ExploreCommandOptions extends InspectCommandOptions {
+  readonly interactive?: boolean;
   readonly maxPages?: string;
   readonly maxDepth?: string;
   readonly maxQueryVariants?: string;
+  readonly maxStates?: string;
+  readonly maxActionsPerState?: string;
+  readonly maxStateDepth?: string;
 }
 
 const reporter = new ConsoleReporter();
@@ -27,7 +31,7 @@ const program = new Command();
 program
   .name('agentic-qa')
   .description('Inspect web applications and collect structured QA evidence.')
-  .version('0.2.0')
+  .version('0.3.0')
   .showHelpAfterError();
 
 program
@@ -68,6 +72,10 @@ program
   .option('--max-pages <count>', 'maximum number of navigation attempts')
   .option('--max-depth <depth>', 'maximum BFS depth; the start page is depth 0')
   .option('--max-query-variants <count>', 'maximum query variants per origin and path')
+  .option('--interactive', 'opt in to conservative same-page UI state exploration')
+  .option('--max-states <count>', 'maximum unique UI states across the run')
+  .option('--max-actions-per-state <count>', 'maximum safe actions attempted from one state')
+  .option('--max-state-depth <depth>', 'maximum interaction path depth; initial state is depth 0')
   .action(async (url: string, commandOptions: ExploreCommandOptions) => {
     const config = loadConfig(process.env, process.cwd(), {
       timeout: commandOptions.timeout,
@@ -76,6 +84,9 @@ program
       maxPages: commandOptions.maxPages,
       maxDepth: commandOptions.maxDepth,
       maxQueryVariantsPerPath: commandOptions.maxQueryVariants,
+      maxStates: commandOptions.maxStates,
+      maxActionsPerState: commandOptions.maxActionsPerState,
+      maxStateDepth: commandOptions.maxStateDepth,
     });
     const useCase = new ExploreApplication(
       new PlaywrightExplorationBrowser(),
@@ -90,6 +101,10 @@ program
       maxPages: config.maxPages,
       maxDepth: config.maxDepth,
       maxQueryVariantsPerPath: config.maxQueryVariantsPerPath,
+      interactive: commandOptions.interactive === true,
+      maxStates: config.maxStates,
+      maxActionsPerState: config.maxActionsPerState,
+      maxStateDepth: config.maxStateDepth,
     });
     reporter.exploration(outcome);
   });

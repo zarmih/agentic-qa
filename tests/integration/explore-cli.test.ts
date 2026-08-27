@@ -53,7 +53,10 @@ describe('agentic-qa explore', () => {
     ) as ExplorationGraph;
 
     expect(graph).toEqual(result.graph);
-    expect(result.schemaVersion).toBe('2.0');
+    expect(result.schemaVersion).toBe('3.0');
+    expect(result.interactive.enabled).toBe(false);
+    expect(result.stateGraph).toBeNull();
+    expect(result.artifacts.stateGraph).toBeNull();
     expect(result.graph.nodes.map((node) => new URL(node.finalUrl).pathname)).toEqual([
       '/',
       '/products',

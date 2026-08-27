@@ -43,6 +43,8 @@ function harness(pages: ReadonlyMap<string, ExplorationPageCapture>) {
       const result = pages.get(request.url);
       return Promise.resolve(result ?? capture(request.url));
     },
+    captureState: () => Promise.reject(new Error('Interactive capture was not expected.')),
+    performInteraction: () => Promise.reject(new Error('Interactive action was not expected.')),
     close: () => Promise.resolve([]),
   };
   const browser: ExplorationBrowser = { start: () => Promise.resolve(session) };
@@ -57,6 +59,7 @@ function harness(pages: ReadonlyMap<string, ExplorationPageCapture>) {
       savedScreenshots.push(filename);
       return Promise.resolve();
     },
+    saveStateScreenshot: () => Promise.resolve(),
     saveExploration: () => Promise.resolve(),
   };
   const times = [new Date('2026-01-01T00:00:00.000Z'), new Date('2026-01-01T00:00:01.000Z')];
@@ -77,6 +80,10 @@ const defaults = {
   maxPages: 25,
   maxDepth: 3,
   maxQueryVariantsPerPath: 2,
+  interactive: false,
+  maxStates: 12,
+  maxActionsPerState: 4,
+  maxStateDepth: 2,
 };
 
 describe('ExploreApplication', () => {

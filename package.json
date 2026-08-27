@@ -1,6 +1,6 @@
 {
   "name": "agentic-qa",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "An open-source foundation for autonomous web application quality assurance.",
   "type": "module",
   "bin": {

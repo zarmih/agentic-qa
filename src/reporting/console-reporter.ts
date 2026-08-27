@@ -55,6 +55,17 @@ export class ConsoleReporter {
       `${pc.dim('Artifacts')} ${outcome.artifactDirectory}`,
     ];
 
+    if (result.interactive.enabled) {
+      lines.splice(
+        11,
+        0,
+        `${pc.dim('UI states')}        ${String(result.interactive.statesDiscovered)}`,
+        `${pc.dim('Actions executed')} ${String(result.interactive.actionsExecuted)}`,
+        `${pc.dim('Actions blocked')}  ${String(result.interactive.actionsBlocked)}`,
+        `${pc.dim('Action failures')}  ${String(result.interactive.actionFailures)}`,
+      );
+    }
+
     if (result.warnings.length > 0) {
       lines.push('', ...result.warnings.map((warning) => pc.yellow(`Warning: ${warning}`)));
     }

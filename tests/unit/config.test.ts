@@ -13,6 +13,9 @@ describe('loadConfig', () => {
       maxPages: 25,
       maxDepth: 3,
       maxQueryVariantsPerPath: 5,
+      maxStates: 12,
+      maxActionsPerState: 4,
+      maxStateDepth: 2,
     });
   });
 
@@ -28,6 +31,9 @@ describe('loadConfig', () => {
           AGENTIC_QA_MAX_PAGES: '20',
           AGENTIC_QA_MAX_DEPTH: '2',
           AGENTIC_QA_MAX_QUERY_VARIANTS_PER_PATH: '4',
+          AGENTIC_QA_MAX_STATES: '30',
+          AGENTIC_QA_MAX_ACTIONS_PER_STATE: '8',
+          AGENTIC_QA_MAX_STATE_DEPTH: '3',
         },
         '/workspace',
       ),
@@ -39,6 +45,9 @@ describe('loadConfig', () => {
       maxPages: 20,
       maxDepth: 2,
       maxQueryVariantsPerPath: 4,
+      maxStates: 30,
+      maxActionsPerState: 8,
+      maxStateDepth: 3,
     });
   });
 
@@ -53,6 +62,9 @@ describe('loadConfig', () => {
         maxPages: '12',
         maxDepth: '0',
         maxQueryVariantsPerPath: '3',
+        maxStates: '20',
+        maxActionsPerState: '6',
+        maxStateDepth: '1',
       },
     );
     expect(config.navigationTimeoutMs).toBe(9000);
@@ -61,6 +73,9 @@ describe('loadConfig', () => {
     expect(config.maxPages).toBe(12);
     expect(config.maxDepth).toBe(0);
     expect(config.maxQueryVariantsPerPath).toBe(3);
+    expect(config.maxStates).toBe(20);
+    expect(config.maxActionsPerState).toBe(6);
+    expect(config.maxStateDepth).toBe(1);
   });
 
   it.each([
@@ -71,6 +86,9 @@ describe('loadConfig', () => {
     ['AGENTIC_QA_MAX_PAGES', '0'],
     ['AGENTIC_QA_MAX_DEPTH', '-1'],
     ['AGENTIC_QA_MAX_QUERY_VARIANTS_PER_PATH', '101'],
+    ['AGENTIC_QA_MAX_STATES', '101'],
+    ['AGENTIC_QA_MAX_ACTIONS_PER_STATE', '26'],
+    ['AGENTIC_QA_MAX_STATE_DEPTH', '6'],
   ])('rejects invalid %s', (key, value) => {
     expect(() => loadConfig({ [key]: value }, '/workspace')).toThrow(ConfigurationError);
   });

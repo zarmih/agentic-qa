@@ -13,6 +13,7 @@ import type {
   PageNode,
 } from '../domain/exploration.js';
 import type { Viewport } from '../domain/inspection.js';
+import type { InteractiveLimits, InteractiveSummary } from '../domain/interaction.js';
 import { parseTargetUrl } from '../domain/target-url.js';
 import {
   canonicalizePageUrl,
@@ -28,11 +29,13 @@ import type {
   RawPageLink,
   RunIdGenerator,
 } from './ports.js';
+import { InteractiveStateExplorer } from './interactive-state-explorer.js';
 
 const MAX_EVIDENCE_ENTRIES_PER_TYPE = 500;
 
-export interface ExploreApplicationOptions extends ExplorationLimits {
+export interface ExploreApplicationOptions extends ExplorationLimits, InteractiveLimits {
   readonly headless: boolean;
+  readonly interactive: boolean;
   readonly navigationTimeoutMs: number;
   readonly viewport: Viewport;
 }
@@ -103,7 +106,7 @@ export class ExploreApplication {
     const startUrl = canonicalizePageUrl(parseTargetUrl(urlInput));
     const startedAt = this.clock.now();
     const runId = this.runIds.next(startedAt);
-    const locations = await this.artifacts.prepareExploration(runId);
+    const locations = await this.artifacts.prepareExploration(runId, options.interactive);
     const scope = new SameOriginScopePolicy(startUrl);
     const safety = new ConservativeNavigationSafetyPolicy();
     const queryVariants = new QueryVariantLimiter(options.maxQueryVariantsPerPath);
@@ -126,6 +129,34 @@ export class ExploreApplication {
       viewport: options.viewport,
       tracePath: locations.tracePath,
     });
+    const interactiveExplorer = options.interactive
+      ? new InteractiveStateExplorer(session, this.artifacts, runId, {
+          maxStates: options.maxStates,
+          maxActionsPerState: options.maxActionsPerState,
+          maxStateDepth: options.maxStateDepth,
+          navigationTimeoutMs: options.navigationTimeoutMs,
+          canNavigate: (candidate) => {
+            try {
+              return scope.classify(candidate) === 'internal' && safety.allows(candidate);
+            } catch {
+              return false;
+            }
+          },
+          onDiscoveredNavigation: (candidate, sourcePage) => {
+            this.scheduleInteractiveNavigation({
+              candidate,
+              sourcePage,
+              options,
+              scope,
+              safety,
+              queryVariants,
+              scheduled,
+              resolvedUrls,
+              queue,
+            });
+          },
+        })
+      : null;
 
     const appendEvidence = <Entry>(
       key: keyof MutableEvidence,
@@ -233,6 +264,9 @@ export class ExploreApplication {
           queue,
           edges,
         });
+        if (interactiveExplorer !== null) {
+          warnings.push(...(await interactiveExplorer.explorePage(node)));
+        }
       }
     } finally {
       warnings.push(...(await session.close()));
@@ -252,8 +286,19 @@ export class ExploreApplication {
     };
     const completedAt = this.clock.now();
     const immutableEvidence: ExplorationEvidence = evidence;
+    const stateGraph = interactiveExplorer?.graph() ?? null;
+    const interactive: InteractiveSummary = interactiveExplorer?.summary() ?? {
+      enabled: false,
+      statesDiscovered: 0,
+      candidatesConsidered: 0,
+      actionsExecuted: 0,
+      actionsBlocked: 0,
+      actionFailures: 0,
+      duplicateStates: 0,
+      limitReached: [],
+    };
     const result: ExplorationResult = {
-      schemaVersion: '2.0',
+      schemaVersion: '3.0',
       runId,
       startUrl,
       startedAt: startedAt.toISOString(),
@@ -263,6 +308,11 @@ export class ExploreApplication {
         maxPages: options.maxPages,
         maxDepth: options.maxDepth,
         maxQueryVariantsPerPath: options.maxQueryVariantsPerPath,
+      },
+      interactiveLimits: {
+        maxStates: options.maxStates,
+        maxActionsPerState: options.maxActionsPerState,
+        maxStateDepth: options.maxStateDepth,
       },
       summary: {
         pagesAttempted,
@@ -276,14 +326,52 @@ export class ExploreApplication {
         failedRequests: immutableEvidence.failedRequests.length,
         httpErrors: immutableEvidence.httpErrors.length,
       },
+      interactive,
       graph,
+      stateGraph,
       evidence: immutableEvidence,
       warnings,
-      artifacts: { graph: 'graph.json', trace: 'trace.zip', pagesDirectory: 'pages' },
+      artifacts: {
+        graph: 'graph.json',
+        trace: 'trace.zip',
+        pagesDirectory: 'pages',
+        stateGraph: options.interactive ? 'state-graph.json' : null,
+        statesDirectory: options.interactive ? 'states' : null,
+      },
     };
 
     await this.artifacts.saveExploration(runId, result);
     return { result, artifactDirectory: locations.directory };
+  }
+
+  private scheduleInteractiveNavigation(input: {
+    readonly candidate: string;
+    readonly sourcePage: PageNode;
+    readonly options: ExploreApplicationOptions;
+    readonly scope: SameOriginScopePolicy;
+    readonly safety: ConservativeNavigationSafetyPolicy;
+    readonly queryVariants: QueryVariantLimiter;
+    readonly scheduled: Set<string>;
+    readonly resolvedUrls: ReadonlyMap<string, string>;
+    readonly queue: QueueEntry[];
+  }): void {
+    let targetUrl: string;
+    try {
+      targetUrl = canonicalizePageUrl(input.candidate);
+    } catch {
+      return;
+    }
+    if (input.scope.classify(targetUrl) !== 'internal' || !input.safety.allows(targetUrl)) return;
+    if (input.resolvedUrls.has(targetUrl) || input.scheduled.has(targetUrl)) return;
+    if (input.sourcePage.depth + 1 > input.options.maxDepth) return;
+    if (!input.queryVariants.accept(targetUrl)) return;
+    if (input.scheduled.size >= input.options.maxPages) return;
+    input.scheduled.add(targetUrl);
+    input.queue.push({
+      url: targetUrl,
+      depth: input.sourcePage.depth + 1,
+      discoveredFrom: input.sourcePage.finalUrl,
+    });
   }
 
   private discoverLinks(input: {

@@ -35,4 +35,15 @@ describe('FileArtifactStore path safety', () => {
       artifacts.savePageScreenshot('run-1', '../escape.png', Buffer.from('png')),
     ).rejects.toBeInstanceOf(ArtifactWriteError);
   });
+
+  it('creates the state directory only for interactive runs and protects state filenames', async () => {
+    const artifacts = await store();
+    await artifacts.prepareExploration('run-interactive', true);
+    await expect(
+      artifacts.saveStateScreenshot('run-interactive', '../state-001.png', Buffer.from('png')),
+    ).rejects.toBeInstanceOf(ArtifactWriteError);
+    await expect(
+      artifacts.saveStateScreenshot('run-interactive', 'state-001.png', Buffer.from('png')),
+    ).resolves.toBeUndefined();
+  });
 });

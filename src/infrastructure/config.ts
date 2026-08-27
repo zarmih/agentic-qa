@@ -7,6 +7,9 @@ const DEFAULT_VIEWPORT: Viewport = { width: 1440, height: 900 };
 const DEFAULT_MAX_PAGES = 25;
 const DEFAULT_MAX_DEPTH = 3;
 const DEFAULT_MAX_QUERY_VARIANTS_PER_PATH = 5;
+const DEFAULT_MAX_STATES = 12;
+const DEFAULT_MAX_ACTIONS_PER_STATE = 4;
+const DEFAULT_MAX_STATE_DEPTH = 2;
 
 export interface AppConfig {
   readonly navigationTimeoutMs: number;
@@ -16,6 +19,9 @@ export interface AppConfig {
   readonly maxPages: number;
   readonly maxDepth: number;
   readonly maxQueryVariantsPerPath: number;
+  readonly maxStates: number;
+  readonly maxActionsPerState: number;
+  readonly maxStateDepth: number;
 }
 
 export interface ConfigOverrides {
@@ -25,6 +31,9 @@ export interface ConfigOverrides {
   readonly maxPages?: string | undefined;
   readonly maxDepth?: string | undefined;
   readonly maxQueryVariantsPerPath?: string | undefined;
+  readonly maxStates?: string | undefined;
+  readonly maxActionsPerState?: string | undefined;
+  readonly maxStateDepth?: string | undefined;
 }
 
 function positiveInteger(name: string, raw: string | undefined, fallback: number): number {
@@ -114,6 +123,27 @@ export function loadConfig(
       DEFAULT_MAX_QUERY_VARIANTS_PER_PATH,
       1,
       100,
+    ),
+    maxStates: integerInRange(
+      'Maximum states',
+      overrides.maxStates ?? environment.AGENTIC_QA_MAX_STATES,
+      DEFAULT_MAX_STATES,
+      1,
+      100,
+    ),
+    maxActionsPerState: integerInRange(
+      'Maximum actions per state',
+      overrides.maxActionsPerState ?? environment.AGENTIC_QA_MAX_ACTIONS_PER_STATE,
+      DEFAULT_MAX_ACTIONS_PER_STATE,
+      1,
+      25,
+    ),
+    maxStateDepth: integerInRange(
+      'Maximum state depth',
+      overrides.maxStateDepth ?? environment.AGENTIC_QA_MAX_STATE_DEPTH,
+      DEFAULT_MAX_STATE_DEPTH,
+      0,
+      5,
     ),
   };
 }

@@ -46,15 +46,35 @@ export class FileArtifactStore implements ArtifactStore, ExplorationArtifactStor
     }
   }
 
-  public async prepareExploration(runId: string): Promise<ExplorationArtifactLocations> {
+  public async prepareExploration(
+    runId: string,
+    interactive = false,
+  ): Promise<ExplorationArtifactLocations> {
     const runDirectory = safeRunDirectory(this.rootDirectory, runId);
     try {
       await mkdir(this.rootDirectory, { recursive: true });
       await mkdir(runDirectory);
       await mkdir(join(runDirectory, 'pages'));
+      if (interactive) await mkdir(join(runDirectory, 'states'));
       return { directory: runDirectory, tracePath: join(runDirectory, 'trace.zip') };
     } catch (error) {
       throw new ArtifactWriteError(runDirectory, error);
+    }
+  }
+
+  public async saveStateScreenshot(
+    runId: string,
+    filename: string,
+    screenshot: Buffer,
+  ): Promise<void> {
+    const statesDirectory = join(safeRunDirectory(this.rootDirectory, runId), 'states');
+    if (basename(filename) !== filename || !/^state-\d{3,}\.png$/.test(filename)) {
+      throw new ArtifactWriteError(join(statesDirectory, filename), new Error('Unsafe filename'));
+    }
+    try {
+      await writeFile(join(statesDirectory, filename), screenshot);
+    } catch (error) {
+      throw new ArtifactWriteError(statesDirectory, error);
     }
   }
 
@@ -77,7 +97,7 @@ export class FileArtifactStore implements ArtifactStore, ExplorationArtifactStor
   public async saveExploration(runId: string, result: ExplorationResult): Promise<void> {
     const runDirectory = safeRunDirectory(this.rootDirectory, runId);
     try {
-      await Promise.all([
+      const writes = [
         writeFile(
           join(runDirectory, 'exploration.json'),
           `${JSON.stringify(result, null, 2)}\n`,
@@ -88,7 +108,17 @@ export class FileArtifactStore implements ArtifactStore, ExplorationArtifactStor
           `${JSON.stringify(result.graph, null, 2)}\n`,
           'utf8',
         ),
-      ]);
+      ];
+      if (result.stateGraph !== null) {
+        writes.push(
+          writeFile(
+            join(runDirectory, 'state-graph.json'),
+            `${JSON.stringify(result.stateGraph, null, 2)}\n`,
+            'utf8',
+          ),
+        );
+      }
+      await Promise.all(writes);
     } catch (error) {
       throw new ArtifactWriteError(runDirectory, error);
     }

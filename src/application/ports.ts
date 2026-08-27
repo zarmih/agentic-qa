@@ -1,5 +1,11 @@
 import type { ExplorationEvidence, ExplorationResult } from '../domain/exploration.js';
 import type {
+  ActionDescriptor,
+  InteractionCandidate,
+  InteractionEvidence,
+  StateObservation,
+} from '../domain/interaction.js';
+import type {
   ElementCounts,
   InspectionResult,
   PageSnapshot,
@@ -33,9 +39,40 @@ export interface ExplorationArtifactLocations {
 }
 
 export interface ExplorationArtifactStore {
-  prepareExploration(runId: string): Promise<ExplorationArtifactLocations>;
+  prepareExploration(runId: string, interactive: boolean): Promise<ExplorationArtifactLocations>;
   saveExploration(runId: string, result: ExplorationResult): Promise<void>;
   savePageScreenshot(runId: string, filename: string, screenshot: Buffer): Promise<void>;
+  saveStateScreenshot(runId: string, filename: string, screenshot: Buffer): Promise<void>;
+}
+
+export interface BrowserStateCapture {
+  readonly observation: StateObservation;
+  readonly screenshot: Buffer;
+  readonly timestamp: string;
+  readonly truncated: boolean;
+}
+
+export interface BrowserStateCaptureRequest {
+  readonly url: string;
+  readonly navigationTimeoutMs: number;
+  readonly canNavigate: (url: string) => boolean;
+}
+
+export interface BrowserInteractionRequest extends BrowserStateCaptureRequest {
+  readonly actionTimeoutMs: number;
+  readonly replayPath: readonly ActionDescriptor[];
+  readonly expectedSourceFingerprint: string;
+  readonly candidate: InteractionCandidate;
+}
+
+export interface BrowserInteractionCapture {
+  readonly status: 'COMPLETED' | 'BLOCKED' | 'FAILED' | 'TIMEOUT';
+  readonly sourceUrl: string;
+  readonly result: BrowserStateCapture | null;
+  readonly durationMs: number;
+  readonly reason: string | null;
+  readonly evidence: InteractionEvidence;
+  readonly discoveredUrls: readonly string[];
 }
 
 export interface RawPageLink {
@@ -67,6 +104,8 @@ export interface ExplorationVisitRequest {
 
 export interface ExplorationBrowserSession {
   visit(request: ExplorationVisitRequest): Promise<ExplorationPageCapture>;
+  captureState(request: BrowserStateCaptureRequest): Promise<BrowserStateCapture>;
+  performInteraction(request: BrowserInteractionRequest): Promise<BrowserInteractionCapture>;
   close(): Promise<readonly string[]>;
 }
 

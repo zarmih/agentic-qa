@@ -1,19 +1,16 @@
 import { errors, type BrowserContext, type Page } from 'playwright';
 import { BrowserStartupError } from '../application/errors.js';
 import type {
+  BrowserInteractionCapture,
+  BrowserInteractionRequest,
+  BrowserStateCapture,
+  BrowserStateCaptureRequest,
   ExplorationBrowser,
   ExplorationBrowserSession,
   ExplorationBrowserStartRequest,
   ExplorationPageCapture,
   ExplorationVisitRequest,
 } from '../application/ports.js';
-import type {
-  ConsoleEvidence,
-  ExplorationEvidence,
-  FailedRequestEvidence,
-  HttpErrorEvidence,
-  PageErrorEvidence,
-} from '../domain/exploration.js';
 import type { ElementCounts, Viewport } from '../domain/inspection.js';
 import {
   closeChromiumResources,
@@ -21,90 +18,10 @@ import {
   type ChromiumResources,
 } from './chromium-context.js';
 import { navigateAndSettle, readElementCounts, readPageLinks } from './page-capture.js';
+import { PageEvidenceCollector } from './evidence-collector.js';
+import { InteractivePageController } from './interactive-page.js';
 
 const EMPTY_COUNTS: ElementCounts = { links: 0, buttons: 0, inputs: 0, forms: 0, headings: 0 };
-const MAX_EVIDENCE_PER_PAGE_AND_TYPE = 200;
-
-interface MutableEvidence {
-  readonly console: ConsoleEvidence[];
-  readonly pageErrors: PageErrorEvidence[];
-  readonly failedRequests: FailedRequestEvidence[];
-  readonly httpErrors: HttpErrorEvidence[];
-  truncated: boolean;
-}
-
-function timestamp(): string {
-  return new Date().toISOString();
-}
-
-function pushLimited<Value>(evidence: MutableEvidence, destination: Value[], value: Value): void {
-  if (destination.length < MAX_EVIDENCE_PER_PAGE_AND_TYPE) {
-    destination.push(value);
-  } else {
-    evidence.truncated = true;
-  }
-}
-
-function withPageUrl(evidence: MutableEvidence, pageUrl: string): ExplorationEvidence {
-  return {
-    console: evidence.console.map((entry) => ({ ...entry, pageUrl })),
-    pageErrors: evidence.pageErrors.map((entry) => ({ ...entry, pageUrl })),
-    failedRequests: evidence.failedRequests.map((entry) => ({ ...entry, pageUrl })),
-    httpErrors: evidence.httpErrors.map((entry) => ({ ...entry, pageUrl })),
-  };
-}
-
-function collectEvidence(page: Page): MutableEvidence {
-  const evidence: MutableEvidence = {
-    console: [],
-    pageErrors: [],
-    failedRequests: [],
-    httpErrors: [],
-    truncated: false,
-  };
-
-  page.on('console', (message) => {
-    const type = message.type();
-    if (type !== 'error' && type !== 'warning') return;
-    pushLimited(evidence, evidence.console, {
-      type,
-      message: message.text(),
-      pageUrl: '',
-      timestamp: timestamp(),
-    });
-  });
-  page.on('pageerror', (error) => {
-    pushLimited(evidence, evidence.pageErrors, {
-      message: error.message,
-      pageUrl: '',
-      timestamp: timestamp(),
-    });
-  });
-  page.on('requestfailed', (request) => {
-    pushLimited(evidence, evidence.failedRequests, {
-      method: request.method(),
-      url: request.url(),
-      resourceType: request.resourceType(),
-      failureReason: request.failure()?.errorText ?? 'Unknown request failure',
-      pageUrl: '',
-      timestamp: timestamp(),
-    });
-  });
-  page.on('response', (response) => {
-    if (response.status() < 400) return;
-    const request = response.request();
-    pushLimited(evidence, evidence.httpErrors, {
-      status: response.status(),
-      method: request.method(),
-      url: response.url(),
-      resourceType: request.resourceType(),
-      pageUrl: '',
-      timestamp: timestamp(),
-    });
-  });
-  return evidence;
-}
-
 async function bestEffortScreenshot(page: Page): Promise<Buffer | null> {
   try {
     return await page.screenshot({ fullPage: true, type: 'png' });
@@ -115,6 +32,7 @@ async function bestEffortScreenshot(page: Page): Promise<Buffer | null> {
 
 class PlaywrightExplorationSession implements ExplorationBrowserSession {
   private closed = false;
+  private readonly interactive = new InteractivePageController();
 
   public constructor(
     private readonly resources: ChromiumResources,
@@ -126,7 +44,7 @@ class PlaywrightExplorationSession implements ExplorationBrowserSession {
     if (this.closed) throw new Error('Exploration browser session is already closed.');
     const startedAt = new Date();
     const page = await this.resources.context.newPage();
-    const evidence = collectEvidence(page);
+    const evidence = new PageEvidenceCollector(page);
 
     await page.route('**/*', async (route) => {
       const playwrightRequest = route.request();
@@ -165,7 +83,7 @@ class PlaywrightExplorationSession implements ExplorationBrowserSession {
             ? [warning, 'Page evidence was truncated to keep the result bounded.']
             : [warning],
           screenshot: await bestEffortScreenshot(page),
-          evidence: withPageUrl(evidence, finalUrl),
+          evidence: evidence.all(finalUrl),
         };
       }
 
@@ -196,7 +114,7 @@ class PlaywrightExplorationSession implements ExplorationBrowserSession {
           durationMs: Math.max(0, completedAt.getTime() - startedAt.getTime()),
           warnings,
           screenshot,
-          evidence: withPageUrl(evidence, finalUrl),
+          evidence: evidence.all(finalUrl),
         };
       } catch (error) {
         const completedAt = new Date();
@@ -216,9 +134,31 @@ class PlaywrightExplorationSession implements ExplorationBrowserSession {
             `Page capture failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
           ],
           screenshot: await bestEffortScreenshot(page),
-          evidence: withPageUrl(evidence, finalUrl),
+          evidence: evidence.all(finalUrl),
         };
       }
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  public async captureState(request: BrowserStateCaptureRequest): Promise<BrowserStateCapture> {
+    if (this.closed) throw new Error('Exploration browser session is already closed.');
+    const page = await this.resources.context.newPage();
+    try {
+      return await this.interactive.capture(page, request);
+    } finally {
+      await page.close().catch(() => undefined);
+    }
+  }
+
+  public async performInteraction(
+    request: BrowserInteractionRequest,
+  ): Promise<BrowserInteractionCapture> {
+    if (this.closed) throw new Error('Exploration browser session is already closed.');
+    const page = await this.resources.context.newPage();
+    try {
+      return await this.interactive.interact(page, request);
     } finally {
       await page.close().catch(() => undefined);
     }

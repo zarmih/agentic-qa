@@ -1,4 +1,5 @@
 import type { ElementCounts, Viewport } from './inspection.js';
+import type { InteractiveLimits, InteractiveSummary, StateGraph } from './interaction.js';
 
 export type PageVisitState = 'visited' | 'failed';
 export type LinkScope = 'internal' | 'external' | 'unsupported';
@@ -102,20 +103,25 @@ export interface ExplorationSummary {
 }
 
 export interface ExplorationResult {
-  readonly schemaVersion: '2.0';
+  readonly schemaVersion: '3.0';
   readonly runId: string;
   readonly startUrl: string;
   readonly startedAt: string;
   readonly completedAt: string;
   readonly durationMs: number;
   readonly limits: ExplorationLimits;
+  readonly interactiveLimits: InteractiveLimits;
   readonly summary: ExplorationSummary;
+  readonly interactive: InteractiveSummary;
   readonly graph: ExplorationGraph;
+  readonly stateGraph: StateGraph | null;
   readonly evidence: ExplorationEvidence;
   readonly warnings: readonly string[];
   readonly artifacts: {
     readonly graph: 'graph.json';
     readonly trace: 'trace.zip';
     readonly pagesDirectory: 'pages';
+    readonly stateGraph: 'state-graph.json' | null;
+    readonly statesDirectory: 'states' | null;
   };
 }
