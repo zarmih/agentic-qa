@@ -2,10 +2,13 @@
 import { Command } from 'commander';
 import { InspectPage } from '../application/inspect-page.js';
 import { ExploreApplication } from '../application/explore-application.js';
+import { PlanQa } from '../application/plan-qa.js';
 import { PlaywrightExplorationBrowser } from '../browser/playwright-exploration-browser.js';
 import { PlaywrightPageInspector } from '../browser/playwright-page-inspector.js';
 import { FileArtifactStore } from '../infrastructure/file-artifact-store.js';
-import { loadConfig } from '../infrastructure/config.js';
+import { FilePlanningArtifacts } from '../infrastructure/file-planning-artifacts.js';
+import { loadConfig, loadPlanningConfig } from '../infrastructure/config.js';
+import { OpenAICompatibleReasoningProvider } from '../infrastructure/openai-compatible-reasoning-provider.js';
 import { SystemClock, TimestampRunIdGenerator } from '../infrastructure/run-id.js';
 import { ConsoleReporter } from '../reporting/console-reporter.js';
 
@@ -25,13 +28,19 @@ interface ExploreCommandOptions extends InspectCommandOptions {
   readonly maxStateDepth?: string;
 }
 
+interface PlanCommandOptions {
+  readonly provider: string;
+  readonly model?: string;
+  readonly llmTimeout?: string;
+}
+
 const reporter = new ConsoleReporter();
 const program = new Command();
 
 program
   .name('agentic-qa')
-  .description('Inspect web applications and collect structured QA evidence.')
-  .version('0.3.0')
+  .description('Inspect and explore web applications, then generate grounded QA plans.')
+  .version('0.4.0')
   .showHelpAfterError();
 
 program
@@ -60,6 +69,33 @@ program
       viewport: config.viewport,
     });
     reporter.success(outcome);
+  });
+
+program
+  .command('plan')
+  .description('Generate a grounded QA plan from an existing exploration.json artifact.')
+  .argument('<exploration-json>', 'path to a Stage 3 exploration.json artifact')
+  .option('--provider <kind>', 'reasoning provider protocol', 'openai-compatible')
+  .option('--model <model>', 'model name; overrides AGENTIC_QA_LLM_MODEL')
+  .option('--llm-timeout <milliseconds>', 'reasoning provider timeout in milliseconds')
+  .action(async (path: string, commandOptions: PlanCommandOptions) => {
+    const config = loadPlanningConfig(process.env, {
+      provider: commandOptions.provider,
+      model: commandOptions.model,
+      timeout: commandOptions.llmTimeout,
+    });
+    const artifacts = new FilePlanningArtifacts(config.apiKey === null ? [] : [config.apiKey]);
+    const useCase = new PlanQa(
+      new OpenAICompatibleReasoningProvider(config),
+      artifacts,
+      artifacts,
+      new SystemClock(),
+    );
+    const outcome = await useCase.execute(path, {
+      provider: config.provider,
+      model: config.model,
+    });
+    reporter.plan(outcome);
   });
 
 program

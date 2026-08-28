@@ -31,7 +31,7 @@ describe('agentic-qa explore --interactive', () => {
       '--artifacts-dir',
       artifacts,
       '--max-pages',
-      '3',
+      '4',
       '--max-depth',
       '1',
       '--max-states',

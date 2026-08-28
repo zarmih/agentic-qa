@@ -10,6 +10,7 @@ const DEFAULT_MAX_QUERY_VARIANTS_PER_PATH = 5;
 const DEFAULT_MAX_STATES = 12;
 const DEFAULT_MAX_ACTIONS_PER_STATE = 4;
 const DEFAULT_MAX_STATE_DEPTH = 2;
+const DEFAULT_LLM_TIMEOUT_MS = 30_000;
 
 export interface AppConfig {
   readonly navigationTimeoutMs: number;
@@ -34,6 +35,20 @@ export interface ConfigOverrides {
   readonly maxStates?: string | undefined;
   readonly maxActionsPerState?: string | undefined;
   readonly maxStateDepth?: string | undefined;
+}
+
+export interface PlanningConfig {
+  readonly provider: 'openai-compatible';
+  readonly baseUrl: string;
+  readonly apiKey: string | null;
+  readonly model: string;
+  readonly timeoutMs: number;
+}
+
+export interface PlanningConfigOverrides {
+  readonly provider?: string | undefined;
+  readonly model?: string | undefined;
+  readonly timeout?: string | undefined;
 }
 
 function positiveInteger(name: string, raw: string | undefined, fallback: number): number {
@@ -144,6 +159,58 @@ export function loadConfig(
       DEFAULT_MAX_STATE_DEPTH,
       0,
       5,
+    ),
+  };
+}
+
+export function loadPlanningConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+  overrides: PlanningConfigOverrides = {},
+): PlanningConfig {
+  const provider = overrides.provider ?? 'openai-compatible';
+  if (provider !== 'openai-compatible') {
+    throw new ConfigurationError(
+      `Unsupported reasoning provider "${provider}". Stage 4 supports openai-compatible.`,
+    );
+  }
+  const baseUrlValue = environment.AGENTIC_QA_LLM_BASE_URL?.trim();
+  if (baseUrlValue === undefined || baseUrlValue === '') {
+    throw new ConfigurationError('AGENTIC_QA_LLM_BASE_URL is required for QA planning.');
+  }
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(baseUrlValue);
+  } catch {
+    throw new ConfigurationError('AGENTIC_QA_LLM_BASE_URL must be an absolute HTTP(S) URL.');
+  }
+  if (
+    !['http:', 'https:'].includes(baseUrl.protocol) ||
+    baseUrl.username !== '' ||
+    baseUrl.password !== ''
+  ) {
+    throw new ConfigurationError(
+      'AGENTIC_QA_LLM_BASE_URL must be an HTTP(S) URL without embedded credentials.',
+    );
+  }
+  baseUrl.hash = '';
+  const model = (overrides.model ?? environment.AGENTIC_QA_LLM_MODEL)?.trim();
+  if (model === undefined || model === '') {
+    throw new ConfigurationError('A model is required. Use --model or AGENTIC_QA_LLM_MODEL.');
+  }
+  if (model.length > 200) throw new ConfigurationError('The configured model name is too long.');
+  const apiKeyValue = environment.AGENTIC_QA_LLM_API_KEY?.trim();
+  const apiKey = apiKeyValue === undefined || apiKeyValue === '' ? null : apiKeyValue;
+  return {
+    provider,
+    baseUrl: baseUrl.href,
+    apiKey,
+    model,
+    timeoutMs: integerInRange(
+      'LLM timeout',
+      overrides.timeout ?? environment.AGENTIC_QA_LLM_TIMEOUT_MS,
+      DEFAULT_LLM_TIMEOUT_MS,
+      100,
+      300_000,
     ),
   };
 }

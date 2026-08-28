@@ -3,7 +3,14 @@ export type ErrorCode =
   | 'ARTIFACT_WRITE_FAILED'
   | 'BROWSER_STARTUP_FAILED'
   | 'NAVIGATION_TIMEOUT'
-  | 'NAVIGATION_FAILED';
+  | 'NAVIGATION_FAILED'
+  | 'PLANNING_SOURCE_INVALID'
+  | 'PROVIDER_AUTH_FAILED'
+  | 'PROVIDER_RATE_LIMITED'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_BAD_RESPONSE'
+  | 'PLAN_SCHEMA_INVALID'
+  | 'PLAN_GROUNDING_INVALID';
 
 export class AgenticQaError extends Error {
   public constructor(
@@ -58,6 +65,60 @@ export class NavigationFailedError extends AgenticQaError {
       'NAVIGATION_FAILED',
       `Could not reach ${url}. Check the address, network connection, and host availability.`,
       { cause },
+    );
+  }
+}
+
+export class PlanningSourceError extends AgenticQaError {
+  public constructor(message: string) {
+    super('PLANNING_SOURCE_INVALID', message);
+  }
+}
+
+export class ProviderAuthenticationError extends AgenticQaError {
+  public constructor() {
+    super(
+      'PROVIDER_AUTH_FAILED',
+      'The reasoning provider rejected authentication. Check the configured API key.',
+    );
+  }
+}
+
+export class ProviderRateLimitError extends AgenticQaError {
+  public constructor() {
+    super(
+      'PROVIDER_RATE_LIMITED',
+      'The reasoning provider rate limit was reached. Try again later.',
+    );
+  }
+}
+
+export class ProviderTimeoutError extends AgenticQaError {
+  public constructor(timeoutMs: number) {
+    super('PROVIDER_TIMEOUT', `The reasoning provider timed out after ${String(timeoutMs)} ms.`);
+  }
+}
+
+export class ProviderBadResponseError extends AgenticQaError {
+  public constructor(message = 'The reasoning provider returned an unexpected response.') {
+    super('PROVIDER_BAD_RESPONSE', message);
+  }
+}
+
+export class PlanSchemaInvalidError extends AgenticQaError {
+  public constructor(errors: readonly string[]) {
+    super(
+      'PLAN_SCHEMA_INVALID',
+      `The reasoning provider returned an invalid plan after one repair attempt: ${errors.join('; ')}`,
+    );
+  }
+}
+
+export class PlanGroundingInvalidError extends AgenticQaError {
+  public constructor(errors: readonly string[]) {
+    super(
+      'PLAN_GROUNDING_INVALID',
+      `The proposed plan contains invalid graph references: ${errors.join('; ')}`,
     );
   }
 }

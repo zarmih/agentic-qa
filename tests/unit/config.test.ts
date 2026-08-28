@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ConfigurationError } from '../../src/application/errors.js';
-import { loadConfig } from '../../src/infrastructure/config.js';
+import { loadConfig, loadPlanningConfig } from '../../src/infrastructure/config.js';
 
 describe('loadConfig', () => {
   it('provides ready-to-run defaults', () => {
@@ -91,5 +91,66 @@ describe('loadConfig', () => {
     ['AGENTIC_QA_MAX_STATE_DEPTH', '6'],
   ])('rejects invalid %s', (key, value) => {
     expect(() => loadConfig({ [key]: value }, '/workspace')).toThrow(ConfigurationError);
+  });
+});
+
+describe('loadPlanningConfig', () => {
+  it('uses CLI model and timeout ahead of environment values', () => {
+    expect(
+      loadPlanningConfig(
+        {
+          AGENTIC_QA_LLM_BASE_URL: 'http://127.0.0.1:1234/v1',
+          AGENTIC_QA_LLM_API_KEY: 'test-secret',
+          AGENTIC_QA_LLM_MODEL: 'environment-model',
+          AGENTIC_QA_LLM_TIMEOUT_MS: '5000',
+        },
+        { model: 'cli-model', timeout: '7000' },
+      ),
+    ).toEqual({
+      provider: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      apiKey: 'test-secret',
+      model: 'cli-model',
+      timeoutMs: 7000,
+    });
+  });
+
+  it('supports unauthenticated local OpenAI-compatible endpoints', () => {
+    expect(
+      loadPlanningConfig({
+        AGENTIC_QA_LLM_BASE_URL: 'http://127.0.0.1:1234/v1',
+        AGENTIC_QA_LLM_MODEL: 'local-model',
+      }).apiKey,
+    ).toBeNull();
+  });
+
+  it.each([
+    [{ AGENTIC_QA_LLM_MODEL: 'model' }, {}, /BASE_URL is required/],
+    [{ AGENTIC_QA_LLM_BASE_URL: 'not-a-url', AGENTIC_QA_LLM_MODEL: 'model' }, {}, /HTTP\(S\)/],
+    [
+      {
+        AGENTIC_QA_LLM_BASE_URL: 'https://user:password@example.test/v1',
+        AGENTIC_QA_LLM_MODEL: 'model',
+      },
+      {},
+      /without embedded credentials/,
+    ],
+    [{ AGENTIC_QA_LLM_BASE_URL: 'http://localhost:1234/v1' }, {}, /model is required/i],
+    [
+      { AGENTIC_QA_LLM_BASE_URL: 'http://localhost:1234/v1', AGENTIC_QA_LLM_MODEL: 'model' },
+      { provider: 'anthropic' },
+      /Unsupported reasoning provider/,
+    ],
+    [
+      {
+        AGENTIC_QA_LLM_BASE_URL: 'http://localhost:1234/v1',
+        AGENTIC_QA_LLM_MODEL: 'model',
+        AGENTIC_QA_LLM_TIMEOUT_MS: '99',
+      },
+      {},
+      /LLM timeout/,
+    ],
+  ] as const)('rejects invalid planning configuration', (environment, overrides, message) => {
+    expect(() => loadPlanningConfig(environment, overrides)).toThrow(message);
   });
 });

@@ -1,6 +1,7 @@
 import pc from 'picocolors';
 import type { InspectionOutcome } from '../application/inspect-page.js';
 import type { ExplorationOutcome } from '../application/explore-application.js';
+import type { PlanQaOutcome } from '../application/plan-qa.js';
 
 export interface Output {
   log(message: string): void;
@@ -70,6 +71,38 @@ export class ConsoleReporter {
       lines.push('', ...result.warnings.map((warning) => pc.yellow(`Warning: ${warning}`)));
     }
     this.output.log(lines.join('\n'));
+  }
+
+  public plan(outcome: PlanQaOutcome): void {
+    const { plan } = outcome;
+    const priorities = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
+    const executability = { AUTOMATABLE: 0, MANUAL_ONLY: 0, UNSUPPORTED: 0 };
+    plan.scenarios.forEach((scenario) => {
+      priorities[scenario.priority] += 1;
+      executability[scenario.executability] += 1;
+    });
+    this.output.log(
+      [
+        pc.bold(pc.green('Agentic QA Plan complete')),
+        '',
+        `${pc.dim('Source run')}   ${plan.sourceRunId}`,
+        `${pc.dim('Provider')}     ${plan.metadata.provider}`,
+        `${pc.dim('Model')}        ${plan.metadata.model}`,
+        `${pc.dim('Scenarios')}    ${String(plan.scenarios.length)}`,
+        '',
+        `${pc.dim('Priorities')}   ${String(priorities.CRITICAL)} critical · ${String(priorities.HIGH)} high · ${String(priorities.MEDIUM)} medium · ${String(priorities.LOW)} low`,
+        `${pc.dim('Execution')}    ${String(executability.AUTOMATABLE)} automatable · ${String(executability.MANUAL_ONLY)} manual · ${String(executability.UNSUPPORTED)} unsupported`,
+        '',
+        pc.bold('Coverage:'),
+        `Pages             ${String(plan.coverage.pages.covered)}/${String(plan.coverage.pages.total)}`,
+        `States            ${String(plan.coverage.states.covered)}/${String(plan.coverage.states.total)}`,
+        `Safe transitions  ${String(plan.coverage.safeTransitions.covered)}/${String(plan.coverage.safeTransitions.total)}`,
+        `Evidence          ${String(plan.coverage.evidenceLocations.covered)}/${String(plan.coverage.evidenceLocations.total)}`,
+        `Error states      ${String(plan.coverage.errorBearingStates.covered)}/${String(plan.coverage.errorBearingStates.total)}`,
+        '',
+        `${pc.dim('Artifacts')} ${outcome.artifactDirectory}`,
+      ].join('\n'),
+    );
   }
 
   public failure(error: unknown, debug: boolean): void {

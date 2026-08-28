@@ -3,11 +3,12 @@ import { spawn } from 'node:child_process';
 export function runCli(
   projectRoot: string,
   arguments_: readonly string[],
+  environment: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--import', 'tsx', 'src/cli/index.ts', ...arguments_], {
       cwd: projectRoot,
-      env: { ...process.env, NO_COLOR: '1' },
+      env: { ...process.env, ...environment, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';

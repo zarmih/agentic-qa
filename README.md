@@ -6,27 +6,33 @@ tests, identify likely defects, and produce reproducible reports and regression 
 
 ## Current status
 
-Stage 3 provides single-page inspection, deterministic multi-page exploration, and an explicitly
-enabled conservative UI-state explorer:
+Stage 4 provides single-page inspection, deterministic multi-page exploration, an explicitly
+enabled conservative UI-state explorer, and provider-neutral QA planning from saved exploration
+artifacts:
 
 ```sh
 agentic-qa inspect https://example.com
 agentic-qa explore https://example.com --max-pages 20 --max-depth 3
 agentic-qa explore https://example.com --interactive
+agentic-qa plan artifacts/<run-id>/exploration.json --provider openai-compatible --model <model>
 ```
 
 `inspect` captures metadata and a screenshot for one page. Plain `explore` preserves the Stage 2
 behavior: deterministic BFS over safe same-origin links, a serializable application graph, and
 bounded browser evidence, with no button clicks. `--interactive` additionally explores meaningful
 same-page UI states through controls that a conservative classifier can prove safe.
+`plan` does not launch a browser. It compiles an existing Stage 3 artifact into bounded untrusted
+application data, asks a reasoning provider for structured scenarios, and validates the response
+before saving it.
 
 HTTP 4xx/5xx responses are saved as valid inspection results with a warning. Invalid input,
 network failures, timeouts, browser startup failures, and artifact write failures return a
 human-readable CLI error and a non-zero exit code.
 
-Agentic QA does **not** yet provide LLM reasoning, form filling, arbitrary button exploration,
-authentication workflows, autonomous test generation, defect reasoning, regression generation,
-or an HTML dashboard.
+Agentic QA does **not** yet execute generated QA plans, generate Playwright code, fill forms, handle
+authentication workflows, make defect verdicts, generate regression files, or provide an HTML
+dashboard. The LLM is a planner only and cannot access Playwright, browser sessions, the shell,
+the filesystem, or arbitrary tools.
 
 ## Requirements and installation
 
@@ -48,6 +54,7 @@ During development, run the command without linking:
 npm run inspect -- https://example.com
 npm run explore -- https://example.com --max-pages 20 --max-depth 3
 npm run explore -- https://example.com --interactive --max-states 12
+npm run plan -- artifacts/<run-id>/exploration.json --model <model>
 ```
 
 Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally ignored by Git.
@@ -67,12 +74,19 @@ Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally i
 | `AGENTIC_QA_MAX_STATES`                  |        `12` | Unique UI states across an interactive run       |
 | `AGENTIC_QA_MAX_ACTIONS_PER_STATE`       |         `4` | Safe actions attempted from one state            |
 | `AGENTIC_QA_MAX_STATE_DEPTH`             |         `2` | Maximum replay action-path depth                 |
+| `AGENTIC_QA_LLM_BASE_URL`                |  _required_ | OpenAI-compatible API base URL                   |
+| `AGENTIC_QA_LLM_API_KEY`                 |       empty | Optional bearer key, read only from environment  |
+| `AGENTIC_QA_LLM_MODEL`                   |  _required_ | Model name when `--model` is not supplied        |
+| `AGENTIC_QA_LLM_TIMEOUT_MS`              |     `30000` | Bounded planning request timeout                 |
 | `AGENTIC_QA_DEBUG`                       |     `false` | Print diagnostic stack traces for CLI failures   |
 
-Both commands accept `--headed`, `--timeout <milliseconds>`, and `--artifacts-dir <path>`.
+`inspect` and `explore` accept `--headed`, `--timeout <milliseconds>`, and
+`--artifacts-dir <path>`.
 `explore` additionally accepts `--max-pages`, `--max-depth`, `--max-query-variants`,
 `--max-states`, `--max-actions-per-state`, and `--max-state-depth`. Interactive exploration is
 enabled only by `--interactive`; limit options override their corresponding environment values.
+`plan` accepts `--provider openai-compatible`, `--model`, and `--llm-timeout`. CLI model and timeout
+values override environment values. API keys intentionally have no CLI option.
 
 ## Safe exploration behavior
 
@@ -147,20 +161,94 @@ artifacts/<run-id>/
 evidence, structured action failures, and a bounded safety audit entry for every discovered
 candidate. `exploration.json` embeds the same graph plus interactive summary and limit status.
 
+## QA planning
+
+Configure an OpenAI-compatible HTTP endpoint, then plan from a completed interactive exploration:
+
+```sh
+export AGENTIC_QA_LLM_BASE_URL=http://127.0.0.1:11434/v1
+export AGENTIC_QA_LLM_MODEL=<model>
+# Set AGENTIC_QA_LLM_API_KEY only when the configured endpoint requires bearer authentication.
+
+agentic-qa plan artifacts/<run-id>/exploration.json \
+  --provider openai-compatible
+```
+
+The adapter uses the JSON chat-completions protocol. Compatibility with a particular hosted or
+local service depends on that service implementing the expected protocol; Stage 4 automated tests
+use only a controlled local fake endpoint and never make paid or public API calls.
+
+Planning follows a strict one-way boundary:
+
+```text
+exploration.json
+  → bounded observation compiler
+  → trusted prompt + untrusted application data
+  → reasoning provider port
+  → JSON schema validation
+  → graph grounding validation
+  → deterministic safety and executability policy
+  → coverage analysis
+  → planning artifacts
+```
+
+Website titles, headings, control names, URLs, errors, and other captured text are always enclosed
+as `UNTRUSTED_APPLICATION_DATA`; they are never placed in the trusted system instructions. The
+planner prompt explicitly rejects instructions found in that data and exposes no browser, shell,
+filesystem, or tool capability. Model output is also untrusted until it passes strict Zod schema
+validation and semantic checks for every page, state, action, candidate, and evidence identifier.
+
+The observation compiler deterministically prioritizes HTTP 5xx responses, page and console
+errors, action failures, failed requests, error-bearing states, navigation, forms, dialogs, and
+blocked controls. Defaults cap input at 30 pages, 40 states, 100 evidence entries, 150 blocked
+candidate summaries, 100 transitions, and 50,000 serialized characters. Truncation is reported in
+the observation and final plan metadata rather than being silent.
+
+Only observed `SAFE` action edges can support an automatable click. Plans involving destructive or
+caution semantics, or a blocked candidate such as delete, checkout, publish, logout, save, or
+submit, are deterministically changed to `MANUAL_ONLY`; the model cannot override that decision.
+Malformed JSON or schema output receives at most one bounded repair request. Grounding failures are
+not repaired into acceptance.
+
+A successful planning run adds:
+
+```text
+artifacts/<run-id>/
+├── exploration.json
+├── graph.json
+├── state-graph.json
+├── trace.zip
+├── pages/
+├── states/
+└── planning/
+    ├── observation.json
+    ├── qa-plan.json
+    └── qa-plan.md
+```
+
+`qa-plan.json` is the source of truth. It includes provider/model metadata, request duration,
+optional token usage, repair count, truncation data, deterministic executability, coverage, and
+quality warnings. `qa-plan.md` is rendered locally from the validated plan; the provider is not
+asked to generate a separate report. API keys are never added to prompts, output, errors, or
+artifacts, and exact configured secret values are defensively redacted before persistence.
+
 ## Architecture
 
-- `domain` — dependency-free page/state graphs, fingerprints, action classification, URL scope, and
-  safety rules.
-- `application` — inspect, page BFS, state BFS, replay orchestration, and browser/artifact ports.
+- `domain` — dependency-free page/state graphs, planning models, fingerprints, action
+  classification, URL scope, and safety rules.
+- `application` — inspect, page BFS, state BFS, replay orchestration, observation compilation,
+  provider/artifact ports, validation, plan safety, deduplication, and coverage analysis.
 - `browser` — Playwright adapters, semantic candidate capture, action execution, evidence, popup,
   dialog, download, lifecycle, and trace cleanup.
-- `infrastructure` — centralized configuration, filesystem artifacts, and run IDs.
-- `reporting` — concise terminal rendering that is separate from JSON persistence.
+- `infrastructure` — centralized configuration, filesystem artifacts, run IDs, secret redaction,
+  and the OpenAI-compatible HTTP adapter.
+- `reporting` — concise terminal output and deterministic Markdown rendering, separate from plan
+  generation.
 - `cli` — command parsing and composition root.
 
-The domain and application layers do not import Playwright or an LLM SDK. Future model providers
-can be introduced behind application ports without coupling the core to OpenAI, Anthropic, xAI,
-OpenAI-compatible APIs, or local runtimes.
+The domain and application layers import neither Playwright nor an LLM SDK. Additional model
+providers can be introduced behind the reasoning port without coupling core planning to a vendor
+or HTTP-client-specific types.
 
 ## Development
 
@@ -172,14 +260,16 @@ npm run format:check
 npm test
 ```
 
-Integration tests host controlled local applications and exercise both real CLI commands with real
-Chromium. They do not depend on the public internet.
+Integration tests host controlled local applications and a fake OpenAI-compatible provider. They
+exercise all CLI modes, including a real Chromium exploration-to-planning pipeline, without public
+internet or API credentials.
 
 ## Roadmap
 
-1. Provider-neutral observation and planning contracts for a later LLM reasoning stage.
-2. Test plan and test case generation with reproducible execution.
-3. Defect triage, Playwright regression generation, reruns, and HTML reporting.
+1. A constrained Stage 5 executor for validated `AUTOMATABLE` scenarios, with no arbitrary LLM
+   browser control.
+2. Evidence-based run verdicts and reproducibility checks.
+3. Playwright regression generation, defect triage, reruns, and HTML reporting.
 
 ## License
 
