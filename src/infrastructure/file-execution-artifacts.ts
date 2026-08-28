@@ -49,15 +49,29 @@ function standardExplorationPath(planFile: string): string {
   return join(dirname(planningDirectory), 'exploration.json');
 }
 
-function safeExecutionDirectory(runDirectory: string, executionId: string): string {
+function validateExecutionId(runDirectory: string, executionId: string): void {
   if (!SAFE_IDENTIFIER.test(executionId)) {
     throw new ArtifactWriteError(runDirectory, new Error('Unsafe execution ID'));
   }
-  return join(runDirectory, 'executions', executionId);
 }
+
+export interface ExecutionArtifactLayout {
+  executionDirectory(runDirectory: string, executionId: string): string;
+}
+
+const DEFAULT_EXECUTION_LAYOUT: ExecutionArtifactLayout = {
+  executionDirectory: (runDirectory, executionId) => join(runDirectory, 'executions', executionId),
+};
 
 export class FileExecutionArtifacts implements ExecutionArtifactReader, ExecutionArtifactWriter {
   private readonly explorations = new FilePlanningArtifacts();
+
+  public constructor(private readonly layout: ExecutionArtifactLayout = DEFAULT_EXECUTION_LAYOUT) {}
+
+  private executionDirectory(runDirectory: string, executionId: string): string {
+    validateExecutionId(runDirectory, executionId);
+    return this.layout.executionDirectory(runDirectory, executionId);
+  }
 
   public async loadExecutionInput(
     planPath: string,
@@ -113,9 +127,9 @@ export class FileExecutionArtifacts implements ExecutionArtifactReader, Executio
     runDirectory: string,
     executionId: string,
   ): Promise<ExecutionArtifactLocations> {
-    const directory = safeExecutionDirectory(runDirectory, executionId);
+    const directory = this.executionDirectory(runDirectory, executionId);
     try {
-      await mkdir(join(runDirectory, 'executions'), { recursive: true });
+      await mkdir(dirname(directory), { recursive: true });
       await mkdir(directory);
       await mkdir(join(directory, 'screenshots'));
       return { directory, tracePath: join(directory, 'trace.zip') };
@@ -136,7 +150,7 @@ export class FileExecutionArtifacts implements ExecutionArtifactReader, Executio
     }
     const relative = join('screenshots', scenarioId, filename);
     const directory = join(
-      safeExecutionDirectory(runDirectory, executionId),
+      this.executionDirectory(runDirectory, executionId),
       'screenshots',
       scenarioId,
     );
@@ -155,7 +169,7 @@ export class FileExecutionArtifacts implements ExecutionArtifactReader, Executio
     result: ExecutionRun,
     markdown: string,
   ): Promise<void> {
-    const directory = safeExecutionDirectory(runDirectory, executionId);
+    const directory = this.executionDirectory(runDirectory, executionId);
     try {
       await Promise.all([
         this.atomicWrite(join(directory, 'execution.json'), `${JSON.stringify(result, null, 2)}\n`),

@@ -4,37 +4,41 @@ import type { SourceIntegrity } from './planning.js';
 export const EXECUTION_STATUSES = ['PASS', 'FAIL', 'BLOCKED', 'ERROR', 'SKIPPED'] as const;
 export type ExecutionStatus = (typeof EXECUTION_STATUSES)[number];
 
-export type ExecutionFailureCode =
-  | 'UNSUPPORTED_ACTION'
-  | 'SCENARIO_LIMIT'
-  | 'STEP_LIMIT'
-  | 'INVALID_SEQUENCE'
-  | 'SOURCE_STATE_DRIFT'
-  | 'ACTION_SEMANTIC_DRIFT'
-  | 'ACTION_MISSING'
-  | 'ACTION_AMBIGUOUS'
-  | 'ACTION_NOT_SAFE'
-  | 'OUT_OF_SCOPE'
-  | 'FORM_ACTION_BLOCKED'
-  | 'PAGE_URL_DRIFT'
-  | 'STATE_DRIFT'
-  | 'NAVIGATION_FAILED'
-  | 'STEP_TIMEOUT'
-  | 'EXECUTION_TIMEOUT'
-  | 'BROWSER_ERROR'
-  | 'MANUAL_ONLY'
-  | 'UNSUPPORTED_SCENARIO';
+export const EXECUTION_FAILURE_CODES = [
+  'UNSUPPORTED_ACTION',
+  'SCENARIO_LIMIT',
+  'STEP_LIMIT',
+  'INVALID_SEQUENCE',
+  'SOURCE_STATE_DRIFT',
+  'ACTION_SEMANTIC_DRIFT',
+  'ACTION_MISSING',
+  'ACTION_AMBIGUOUS',
+  'ACTION_NOT_SAFE',
+  'OUT_OF_SCOPE',
+  'FORM_ACTION_BLOCKED',
+  'PAGE_URL_DRIFT',
+  'STATE_DRIFT',
+  'NAVIGATION_FAILED',
+  'STEP_TIMEOUT',
+  'EXECUTION_TIMEOUT',
+  'BROWSER_ERROR',
+  'MANUAL_ONLY',
+  'UNSUPPORTED_SCENARIO',
+] as const;
+export type ExecutionFailureCode = (typeof EXECUTION_FAILURE_CODES)[number];
 
-export type ExecutionEvidenceKind =
-  | 'CONSOLE_ERROR'
-  | 'CONSOLE_WARNING'
-  | 'PAGE_ERROR'
-  | 'FAILED_REQUEST'
-  | 'HTTP_ERROR'
-  | 'DIALOG'
-  | 'POPUP'
-  | 'DOWNLOAD'
-  | 'ACTION_FAILURE';
+export const EXECUTION_EVIDENCE_KINDS = [
+  'CONSOLE_ERROR',
+  'CONSOLE_WARNING',
+  'PAGE_ERROR',
+  'FAILED_REQUEST',
+  'HTTP_ERROR',
+  'DIALOG',
+  'POPUP',
+  'DOWNLOAD',
+  'ACTION_FAILURE',
+] as const;
+export type ExecutionEvidenceKind = (typeof EXECUTION_EVIDENCE_KINDS)[number];
 
 export interface ExecutionEvidenceEntry {
   readonly id: string;
@@ -135,8 +139,13 @@ export interface ExecutionEnvironment {
   readonly viewport: Viewport;
 }
 
+export interface ExecutionIntegrity {
+  readonly algorithm: 'SHA-256';
+  readonly payloadDigest: string;
+}
+
 export interface ExecutionRun {
-  readonly schemaVersion: '1.0';
+  readonly schemaVersion: '1.1';
   readonly executionId: string;
   readonly sourceRunId: string;
   readonly planId: string;
@@ -148,6 +157,7 @@ export interface ExecutionRun {
   readonly scenarios: readonly ScenarioExecution[];
   readonly evidence: readonly ExecutionEvidenceEntry[];
   readonly sourceIntegrity: SourceIntegrity & { readonly planDigest: string };
+  readonly executionIntegrity: ExecutionIntegrity;
   readonly artifacts: {
     readonly report: 'execution.json';
     readonly markdown: 'execution.md';

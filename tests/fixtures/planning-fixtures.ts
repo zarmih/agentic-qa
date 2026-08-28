@@ -128,7 +128,7 @@ export function planningExplorationFixture(): ExplorationResult {
         {
           id: 'state-001',
           pageId: 'page-001',
-          fingerprint: 'fingerprint-1',
+          fingerprint: 'a'.repeat(64),
           url: 'http://fixture.test/',
           title: 'Fixture',
           depth: 0,
@@ -145,7 +145,7 @@ export function planningExplorationFixture(): ExplorationResult {
         {
           id: 'state-002',
           pageId: 'page-001',
-          fingerprint: 'fingerprint-2',
+          fingerprint: 'b'.repeat(64),
           url: 'http://fixture.test/',
           title: 'Fixture',
           depth: 1,

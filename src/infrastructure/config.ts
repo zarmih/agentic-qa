@@ -15,6 +15,9 @@ const DEFAULT_MAX_EXECUTION_SCENARIOS = 20;
 const DEFAULT_MAX_STEPS_PER_SCENARIO = 10;
 const DEFAULT_EXECUTION_TIMEOUT_MS = 300_000;
 const DEFAULT_STEP_TIMEOUT_MS = 5_000;
+const DEFAULT_VERIFY_ATTEMPTS = 3;
+const DEFAULT_MAX_VERIFY_FINDINGS = 10;
+const DEFAULT_VERIFY_TIMEOUT_MS = 900_000;
 
 export interface AppConfig {
   readonly navigationTimeoutMs: number;
@@ -70,6 +73,18 @@ export interface ExecutionConfigOverrides {
   readonly maxScenarios?: string | undefined;
   readonly stepTimeout?: string | undefined;
   readonly executionTimeout?: string | undefined;
+}
+
+export interface VerificationConfig extends ExecutionConfig {
+  readonly attempts: number;
+  readonly maxFindings: number;
+  readonly verifyTimeoutMs: number;
+}
+
+export interface VerificationConfigOverrides extends ExecutionConfigOverrides {
+  readonly attempts?: string | undefined;
+  readonly maxFindings?: string | undefined;
+  readonly verifyTimeout?: string | undefined;
 }
 
 function positiveInteger(name: string, raw: string | undefined, fallback: number): number {
@@ -290,6 +305,36 @@ export function loadExecutionConfig(
       DEFAULT_STEP_TIMEOUT_MS,
       250,
       120_000,
+    ),
+  };
+}
+
+export function loadVerificationConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+  overrides: VerificationConfigOverrides = {},
+): VerificationConfig {
+  return {
+    ...loadExecutionConfig(environment, overrides),
+    attempts: integerInRange(
+      'Verification attempts',
+      overrides.attempts ?? environment.AGENTIC_QA_VERIFY_ATTEMPTS,
+      DEFAULT_VERIFY_ATTEMPTS,
+      2,
+      10,
+    ),
+    maxFindings: integerInRange(
+      'Maximum verification findings',
+      overrides.maxFindings ?? environment.AGENTIC_QA_MAX_VERIFY_FINDINGS,
+      DEFAULT_MAX_VERIFY_FINDINGS,
+      1,
+      50,
+    ),
+    verifyTimeoutMs: integerInRange(
+      'Verification timeout',
+      overrides.verifyTimeout ?? environment.AGENTIC_QA_VERIFY_TIMEOUT_MS,
+      DEFAULT_VERIFY_TIMEOUT_MS,
+      1_000,
+      3_600_000,
     ),
   };
 }

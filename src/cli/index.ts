@@ -4,13 +4,21 @@ import { InspectPage } from '../application/inspect-page.js';
 import { ExploreApplication } from '../application/explore-application.js';
 import { PlanQa } from '../application/plan-qa.js';
 import { RunQaPlan } from '../application/run-qa-plan.js';
+import { ConstrainedScenarioReproducer } from '../application/constrained-scenario-reproducer.js';
+import { VerifyExecution } from '../application/verify-execution.js';
 import { PlaywrightExplorationBrowser } from '../browser/playwright-exploration-browser.js';
 import { PlaywrightPageInspector } from '../browser/playwright-page-inspector.js';
 import { PlaywrightScenarioExecutionBrowser } from '../browser/playwright-scenario-execution-browser.js';
 import { FileArtifactStore } from '../infrastructure/file-artifact-store.js';
 import { FileExecutionArtifacts } from '../infrastructure/file-execution-artifacts.js';
 import { FilePlanningArtifacts } from '../infrastructure/file-planning-artifacts.js';
-import { loadConfig, loadExecutionConfig, loadPlanningConfig } from '../infrastructure/config.js';
+import { FileVerificationArtifacts } from '../infrastructure/file-verification-artifacts.js';
+import {
+  loadConfig,
+  loadExecutionConfig,
+  loadPlanningConfig,
+  loadVerificationConfig,
+} from '../infrastructure/config.js';
 import { OpenAICompatibleReasoningProvider } from '../infrastructure/openai-compatible-reasoning-provider.js';
 import { SystemClock, TimestampRunIdGenerator } from '../infrastructure/run-id.js';
 import { ConsoleReporter } from '../reporting/console-reporter.js';
@@ -45,13 +53,21 @@ interface RunCommandOptions {
   readonly executionTimeout?: string;
 }
 
+interface VerifyCommandOptions {
+  readonly attempts?: string;
+  readonly maxFindings?: string;
+  readonly headed?: boolean;
+}
+
 const reporter = new ConsoleReporter();
 const program = new Command();
 
 program
   .name('agentic-qa')
-  .description('Inspect and explore web applications, then plan and run constrained QA scenarios.')
-  .version('0.5.0')
+  .description(
+    'Inspect and explore web applications, then plan, run, and verify constrained QA scenarios.',
+  )
+  .version('0.6.0')
   .showHelpAfterError();
 
 program
@@ -145,6 +161,56 @@ program
         stepTimeoutMs: config.stepTimeoutMs,
       });
       reporter.execution(outcome);
+      process.exitCode = outcome.exitCode;
+    } catch (error) {
+      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      process.exitCode = 2;
+    }
+  });
+
+program
+  .command('verify')
+  .description('Reproduce execution signals and create deterministic defect findings.')
+  .argument('<execution-json>', 'path to a Stage 5 execution.json artifact')
+  .option('--attempts <count>', 'isolated reproduction attempts per rerunnable candidate')
+  .option('--max-findings <count>', 'maximum verification candidates to process')
+  .option('--headed', 'show Chromium during reproduction attempts')
+  .action(async (path: string, commandOptions: VerifyCommandOptions) => {
+    try {
+      const config = loadVerificationConfig(process.env, {
+        attempts: commandOptions.attempts,
+        maxFindings: commandOptions.maxFindings,
+        headed: commandOptions.headed,
+      });
+      const executionArtifacts = new FileExecutionArtifacts();
+      const verificationArtifacts = new FileVerificationArtifacts();
+      const runIds = new TimestampRunIdGenerator();
+      const clock = new SystemClock();
+      const runner = new ConstrainedScenarioReproducer(
+        executionArtifacts,
+        new PlaywrightScenarioExecutionBrowser(),
+        runIds,
+        clock,
+      );
+      const useCase = new VerifyExecution(
+        verificationArtifacts,
+        verificationArtifacts,
+        runner,
+        runIds,
+        clock,
+      );
+      const outcome = await useCase.execute(path, {
+        attempts: config.attempts,
+        maxFindings: config.maxFindings,
+        verifyTimeoutMs: config.verifyTimeoutMs,
+        headless: config.headless,
+        viewport: config.viewport,
+        navigationTimeoutMs: config.navigationTimeoutMs,
+        maxStepsPerScenario: config.maxStepsPerScenario,
+        executionTimeoutMs: config.executionTimeoutMs,
+        stepTimeoutMs: config.stepTimeoutMs,
+      });
+      reporter.verification(outcome);
       process.exitCode = outcome.exitCode;
     } catch (error) {
       reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');

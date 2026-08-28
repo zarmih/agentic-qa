@@ -4,9 +4,15 @@ import { createServer, type Server } from 'node:http';
 export interface MiniAppServer {
   readonly baseUrl: string;
   counters(): Promise<Readonly<Record<string, number>>>;
+  verificationAttempts(): Promise<Readonly<Record<VerificationScenarioName, number>>>;
   setExecutionBehavior(behavior: Partial<ExecutionFixtureBehavior>): void;
+  setVerificationMode(mode: VerificationFixtureMode): void;
   close(): Promise<void>;
 }
+
+export type VerificationFixtureMode = 'baseline' | 'source' | 'verify';
+export type VerificationScenarioName =
+  'stable' | 'flaky' | 'fixed' | 'inconclusive' | 'varied' | 'http';
 
 export interface ExecutionFixtureBehavior {
   readonly regression: 'stable' | 'wrong-state';
@@ -260,10 +266,128 @@ function executionPage(behavior: ExecutionFixtureBehavior): string {
   );
 }
 
+const VERIFICATION_SCENARIOS: readonly VerificationScenarioName[] = [
+  'stable',
+  'flaky',
+  'fixed',
+  'inconclusive',
+  'varied',
+  'http',
+];
+
+function initialVerificationAttempts(): Record<VerificationScenarioName, number> {
+  return Object.fromEntries(VERIFICATION_SCENARIOS.map((name) => [name, 0])) as Record<
+    VerificationScenarioName,
+    number
+  >;
+}
+
+function verificationHomePage(): string {
+  return page(
+    'Verification fixture',
+    `${VERIFICATION_SCENARIOS.map(
+      (name) => `<a href="/verification/${name}">${name} verification case</a>`,
+    ).join('')}
+    <hr>
+    <button type="button" data-danger="delete">Delete account</button>
+    <button type="button" data-danger="logout">Logout</button>
+    <button type="button" data-danger="buy">Buy now</button>
+    <button type="button" data-danger="checkout">Checkout</button>
+    <button type="button" data-danger="publish">Publish</button>
+    <button type="button" data-danger="reset">Reset database</button>
+    <button type="button" data-danger="unsubscribe">Unsubscribe</button>
+    <form method="post" action="/__submit"><input name="value"><button type="submit">Submit form</button></form>`,
+    `<script>
+      document.querySelectorAll('[data-danger]').forEach((button) => button.addEventListener('click', () => {
+        fetch('/__danger?name=' + encodeURIComponent(button.dataset.danger));
+      }));
+    </script>`,
+  );
+}
+
+function verificationPage(name: VerificationScenarioName, mode: VerificationFixtureMode): string {
+  const labels: Readonly<Record<VerificationScenarioName, string>> = {
+    stable: 'Open stable panel',
+    flaky: 'Open flaky panel',
+    fixed: 'Open fixed panel',
+    inconclusive: 'Open inconclusive panel',
+    varied: 'Open varied panel',
+    http: 'Open cart',
+  };
+  const safeLabel = labels[name];
+  const runtimeLabel = mode === 'verify' && name === 'inconclusive' ? 'Delete account' : safeLabel;
+  return page(
+    `Verification ${name}`,
+    `<button type="button" data-testid="verification-${name}" aria-label="${runtimeLabel}">${runtimeLabel}</button>
+    <section id="verification-result" aria-live="polite"></section>`,
+    `<script>
+      const openDatabase = () => new Promise((resolve) => {
+        if ('indexedDB' in window === false) { resolve({ seen: false, database: null }); return; }
+        const request = indexedDB.open('agentic-qa-verification', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('markers');
+        request.onerror = () => resolve({ seen: false, database: null });
+        request.onsuccess = () => {
+          const database = request.result;
+          const transaction = database.transaction('markers', 'readwrite');
+          const store = transaction.objectStore('markers');
+          const get = store.get('${name}');
+          get.onerror = () => resolve({ seen: false, database });
+          get.onsuccess = () => { store.put(true, '${name}'); resolve({ seen: get.result === true, database }); };
+        };
+      });
+      document.querySelector('[data-testid="verification-${name}"]').addEventListener('click', async () => {
+        const [response, storage] = await Promise.all([
+          fetch('/__verification-action?name=${name}'),
+          openDatabase(),
+        ]);
+        const result = await response.json();
+        const heading = document.createElement('h2');
+        heading.textContent = storage.seen ? 'Contaminated IndexedDB state' : result.heading;
+        document.querySelector('#verification-result').replaceChildren(heading);
+        storage.database?.close();
+      });
+    </script>`,
+  );
+}
+
+function verificationOutcome(
+  name: VerificationScenarioName,
+  mode: VerificationFixtureMode,
+  attempt: number,
+): { readonly heading: string; readonly status: number } {
+  const expected = `Expected ${name} state`;
+  if (mode === 'baseline' || name === 'http') {
+    return { heading: expected, status: name === 'http' ? 500 : 200 };
+  }
+  if (mode === 'source') {
+    return { heading: `Wrong ${name} state`, status: 200 };
+  }
+  switch (name) {
+    case 'stable':
+      return { heading: 'Wrong stable state', status: 200 };
+    case 'flaky':
+      return {
+        heading: attempt === 2 ? expected : 'Wrong flaky state',
+        status: 200,
+      };
+    case 'fixed':
+      return { heading: expected, status: 200 };
+    case 'inconclusive':
+      return { heading: 'This action must remain blocked', status: 200 };
+    case 'varied':
+      return {
+        heading: attempt === 2 ? 'Wrong varied state B' : 'Wrong varied state',
+        status: 200,
+      };
+  }
+}
+
 function respond(
   server: Server,
   counters: Record<CounterName, number>,
   executionBehavior: () => ExecutionFixtureBehavior,
+  verificationMode: () => VerificationFixtureMode,
+  verificationAttempts: Record<VerificationScenarioName, number>,
 ): void {
   server.on('request', (request, response) => {
     const url = new URL(request.url ?? '/', 'http://fixture.test');
@@ -276,6 +400,25 @@ function respond(
       counters.safe += 1;
       response.writeHead(200, { 'content-type': 'text/plain' });
       response.end('ok');
+      return;
+    }
+    if (url.pathname === '/__verification-action') {
+      const name = url.searchParams.get('name');
+      if (!VERIFICATION_SCENARIOS.includes(name as VerificationScenarioName)) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: 'unknown verification scenario' }));
+        return;
+      }
+      const scenario = name as VerificationScenarioName;
+      verificationAttempts[scenario] += 1;
+      counters.safe += 1;
+      const outcome = verificationOutcome(
+        scenario,
+        verificationMode(),
+        verificationAttempts[scenario],
+      );
+      response.writeHead(outcome.status, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(outcome));
       return;
     }
     if (url.pathname === '/__danger') {
@@ -353,6 +496,9 @@ function respond(
       case '/execution':
         html = executionPage(executionBehavior());
         break;
+      case '/verification':
+        html = verificationHomePage();
+        break;
       case '/popup':
         html = page('Same-origin popup', '<p>Popup content</p>');
         break;
@@ -364,6 +510,13 @@ function respond(
         html = page(`Search ${url.searchParams.get('q') ?? ''}`, '<a href="/">Home</a>');
         break;
       default:
+        if (url.pathname.startsWith('/verification/')) {
+          const name = url.pathname.slice('/verification/'.length);
+          if (VERIFICATION_SCENARIOS.includes(name as VerificationScenarioName)) {
+            html = verificationPage(name as VerificationScenarioName, verificationMode());
+            break;
+          }
+        }
         status = 404;
         html = page('Not found', '<a href="/">Home</a>');
     }
@@ -376,7 +529,15 @@ export async function startMiniAppServer(): Promise<MiniAppServer> {
   const server = createServer();
   const counters = initialCounters();
   let executionBehavior = { ...DEFAULT_EXECUTION_BEHAVIOR };
-  respond(server, counters, () => executionBehavior);
+  let verificationMode: VerificationFixtureMode = 'baseline';
+  const verificationAttempts = initialVerificationAttempts();
+  respond(
+    server,
+    counters,
+    () => executionBehavior,
+    () => verificationMode,
+    verificationAttempts,
+  );
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
@@ -384,8 +545,14 @@ export async function startMiniAppServer(): Promise<MiniAppServer> {
   return {
     baseUrl: `http://127.0.0.1:${String(address.port)}`,
     counters: () => Promise.resolve({ ...counters }),
+    verificationAttempts: () => Promise.resolve({ ...verificationAttempts }),
     setExecutionBehavior(behavior) {
       executionBehavior = { ...executionBehavior, ...behavior };
+    },
+    setVerificationMode(mode) {
+      verificationMode = mode;
+      const reset = initialVerificationAttempts();
+      for (const name of VERIFICATION_SCENARIOS) verificationAttempts[name] = reset[name];
     },
     async close() {
       server.close();

@@ -29,11 +29,13 @@ import type {
   ScenarioExecutionBrowser,
 } from './execution-ports.js';
 import { ExecutionInputValidator } from './execution-validator.js';
+import { ExecutionIntegrityService, type UnsignedExecutionRun } from './execution-integrity.js';
 import type { Clock, RunIdGenerator } from './ports.js';
 import { ExecutionMarkdownRenderer } from '../reporting/execution-markdown.js';
 
 export interface RunQaPlanOptions extends ExecutionLimits {
   readonly explorationPath?: string | undefined;
+  readonly scenarioIds?: readonly string[] | undefined;
   readonly headless: boolean;
   readonly viewport: Viewport;
   readonly navigationTimeoutMs: number;
@@ -99,6 +101,7 @@ export class RunQaPlan {
   private readonly validator = new ExecutionInputValidator();
   private readonly compiler = new ScenarioExecutionCompiler();
   private readonly evidenceMatcher = new EvidenceReproductionMatcher();
+  private readonly executionIntegrity = new ExecutionIntegrityService();
   private readonly markdown = new ExecutionMarkdownRenderer();
 
   public constructor(
@@ -112,7 +115,12 @@ export class RunQaPlan {
   public async execute(planPath: string, options: RunQaPlanOptions): Promise<RunQaPlanOutcome> {
     const loaded = await this.reader.loadExecutionInput(planPath, options.explorationPath);
     const validated = this.validator.validate(loaded);
-    const compiled = this.compiler.compile(loaded.plan, loaded.exploration, options);
+    const compiled = this.compiler.compile(
+      loaded.plan,
+      loaded.exploration,
+      options,
+      options.scenarioIds,
+    );
     const startedAt = this.clock.now();
     const executionId = `exec-${this.runIds.next(startedAt)}`;
     const locations = await this.writer.prepareExecution(loaded.runDirectory, executionId);
@@ -184,9 +192,9 @@ export class RunQaPlan {
     const allEvidence = evidence.all();
     const reproductions = scenarios.flatMap((scenario) => scenario.evidenceReproduction);
     const summary = {
-      scenariosInPlan: loaded.plan.scenarios.length,
-      automatableScenarios: loaded.plan.scenarios.filter(
-        (scenario) => scenario.executability === 'AUTOMATABLE',
+      scenariosInPlan: compiled.scenarios.length,
+      automatableScenarios: compiled.scenarios.filter(
+        ({ scenario }) => scenario.executability === 'AUTOMATABLE',
       ).length,
       selectedScenarios: compiled.scenarios.filter((scenario) => scenario.skip === null).length,
       passed: scenarios.filter((scenario) => scenario.status === 'PASS').length,
@@ -202,8 +210,8 @@ export class RunQaPlan {
       evidenceEvaluated: reproductions.filter((item) => item.status !== 'NOT_EVALUATED').length,
       limitReached: [...compiled.limitReached, ...(evidence.truncated ? ['evidence'] : [])].sort(),
     } as const;
-    const result: ExecutionRun = {
-      schemaVersion: '1.0',
+    const unsignedResult: UnsignedExecutionRun = {
+      schemaVersion: '1.1',
       executionId,
       sourceRunId: loaded.exploration.runId,
       planId: loaded.plan.planId,
@@ -230,6 +238,10 @@ export class RunQaPlan {
         trace: 'trace.zip',
         screenshotsDirectory: 'screenshots',
       },
+    };
+    const result: ExecutionRun = {
+      ...unsignedResult,
+      executionIntegrity: this.executionIntegrity.create(unsignedResult),
     };
     await this.writer.saveExecution(
       loaded.runDirectory,

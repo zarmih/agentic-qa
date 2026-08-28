@@ -115,6 +115,25 @@ describe('ScenarioExecutionCompiler', () => {
     expect(result.scenarios.every((item) => item.skip?.code === 'STEP_LIMIT')).toBe(true);
   });
 
+  it('compiles only explicitly selected grounded scenarios for verification reruns', () => {
+    const fixture = executionPlanFixture([
+      navigationScenario('scenario-one'),
+      clickScenario('scenario-two'),
+    ]);
+    const result = new ScenarioExecutionCompiler().compile(
+      fixture.plan,
+      fixture.loaded.exploration,
+      limits,
+      ['scenario-two'],
+    );
+    expect(result.scenarios.map((item) => item.scenario.id)).toEqual(['scenario-two']);
+    expect(() =>
+      new ScenarioExecutionCompiler().compile(fixture.plan, fixture.loaded.exploration, limits, [
+        'scenario-forged',
+      ]),
+    ).toThrow(/does not exist in the plan/);
+  });
+
   it('refuses a source edge whose audited candidate semantics became destructive', () => {
     const fixture = executionPlanFixture([clickScenario()]);
     const source = fixture.loaded.exploration;

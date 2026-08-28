@@ -6,9 +6,9 @@ tests, identify likely defects, and produce reproducible reports and regression 
 
 ## Current status
 
-Stage 5 provides single-page inspection, deterministic multi-page exploration, an explicitly
-enabled conservative UI-state explorer, provider-neutral QA planning, and constrained execution
-of validated plans:
+Stage 6 provides single-page inspection, deterministic multi-page exploration, an explicitly
+enabled conservative UI-state explorer, provider-neutral QA planning, constrained execution of
+validated plans, and deterministic defect verification:
 
 ```sh
 agentic-qa inspect https://example.com
@@ -16,6 +16,7 @@ agentic-qa explore https://example.com --max-pages 20 --max-depth 3
 agentic-qa explore https://example.com --interactive
 agentic-qa plan artifacts/<run-id>/exploration.json --provider openai-compatible --model <model>
 agentic-qa run artifacts/<run-id>/planning/qa-plan.json
+agentic-qa verify artifacts/<run-id>/executions/<execution-id>/execution.json --attempts 3
 ```
 
 `inspect` captures metadata and a screenshot for one page. Plain `explore` preserves the Stage 2
@@ -26,15 +27,19 @@ same-page UI states through controls that a conservative classifier can prove sa
 application data, asks a reasoning provider for structured scenarios, and validates the response
 before saving it. `run` uses no LLM or provider connection: it executes only validated
 `AUTOMATABLE` scenarios through IDs and semantic descriptors already recorded in the source graph.
+`verify` is also LLM-free. It selects structural failures and significant reproduced error
+evidence, repeats only the relevant grounded scenarios in isolated browser contexts, and produces
+conservative reproducibility verdicts and defect findings.
 
 HTTP 4xx/5xx responses are saved as valid inspection results with a warning. Invalid input,
 network failures, timeouts, browser startup failures, and artifact write failures return a
 human-readable CLI error and a non-zero exit code.
 
 Agentic QA does **not** yet generate Playwright source code, fill forms, handle authentication
-workflows, make defect verdicts, generate regression files, or provide an HTML dashboard. The LLM
-is a planner only and cannot access Playwright, browser sessions, the shell, the filesystem, or
-arbitrary tools. Stage 5 execution remains deterministic and LLM-free.
+workflows, infer root causes, generate regression files, create issues, analyze screenshots, or
+provide an HTML dashboard. The LLM is a planner only and cannot access Playwright, browser
+sessions, the shell, the filesystem, or arbitrary tools. Execution and verification remain
+deterministic and LLM-free.
 
 ## Requirements and installation
 
@@ -58,6 +63,7 @@ npm run explore -- https://example.com --max-pages 20 --max-depth 3
 npm run explore -- https://example.com --interactive --max-states 12
 npm run plan -- artifacts/<run-id>/exploration.json --model <model>
 npm run run -- artifacts/<run-id>/planning/qa-plan.json
+npm run verify -- artifacts/<run-id>/executions/<execution-id>/execution.json
 ```
 
 Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally ignored by Git.
@@ -85,6 +91,9 @@ Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally i
 | `AGENTIC_QA_MAX_STEPS_PER_SCENARIO`      |        `10` | Hard step cap for one execution scenario         |
 | `AGENTIC_QA_EXECUTION_TIMEOUT_MS`        |    `300000` | Bounded duration of an execution run             |
 | `AGENTIC_QA_STEP_TIMEOUT_MS`             |      `5000` | Bounded browser action timeout                   |
+| `AGENTIC_QA_VERIFY_ATTEMPTS`             |         `3` | Isolated attempts per rerunnable candidate       |
+| `AGENTIC_QA_MAX_VERIFY_FINDINGS`         |        `10` | Maximum candidates selected for verification     |
+| `AGENTIC_QA_VERIFY_TIMEOUT_MS`           |    `900000` | Global bounded verification duration             |
 | `AGENTIC_QA_DEBUG`                       |     `false` | Print diagnostic stack traces for CLI failures   |
 
 `inspect` and `explore` accept `--headed`, `--timeout <milliseconds>`, and
@@ -97,6 +106,8 @@ values override environment values. API keys intentionally have no CLI option.
 `run` accepts `--exploration`, `--headed`, `--max-scenarios`, `--step-timeout`, and
 `--execution-timeout`. `--exploration` is required when a copied plan is not in the standard
 `<run>/planning/qa-plan.json` layout. There is no unsafe, force-manual, or safety-disable option.
+`verify` accepts `--attempts` (hard range 2–10), `--max-findings`, and `--headed`. It requires the
+standard `<run>/executions/<execution-id>/execution.json` layout so source linkage is unambiguous.
 
 ## Safe exploration behavior
 
@@ -298,9 +309,9 @@ Deterministic result meanings are:
 - `SKIPPED` — a manual, unsupported, over-limit, or dependent step/scenario was not executed.
 
 Console errors and other evidence do not automatically turn a structurally correct transition
-into `FAIL`. They are retained as findings, attributed to scenario/step, and compared with cited
-source evidence using deterministic kind/message signatures. This separation leaves stronger
-defect verdicts to a later stage.
+into `FAIL`. They are retained as runtime evidence, attributed to scenario/step, and compared with
+cited source evidence using deterministic signatures. A later explicit `verify` invocation—not
+the executor—decides whether a signal is repeatable enough to become a defect finding.
 
 Each invocation creates a new execution directory, so one source run can be executed repeatedly:
 
@@ -324,17 +335,118 @@ artifacts/<run-id>/
                 └── 001.png
 ```
 
-`execution.json` is the source of truth; Markdown is rendered deterministically without an LLM.
+`execution.json` schema 1.1 is the source of truth and includes a canonical SHA-256 result payload
+digest; Markdown is rendered deterministically without an LLM.
 Exit code `0` means no FAIL/BLOCKED/ERROR, `1` means an application mismatch or safety block was
 reported, and `2` means an execution/configuration error. Legacy Stage 4 plans with schema 1.0 have
-no integrity metadata and are rejected with an explicit instruction to run `plan` again.
+no integrity metadata and are rejected with an explicit instruction to run `plan` again. Legacy
+execution schema 1.0 lacks result integrity and must be regenerated with `run` before verification.
+
+## Verifying defects
+
+Verify an execution result from its standard source-run layout:
+
+```sh
+agentic-qa verify \
+  artifacts/<run-id>/executions/<execution-id>/execution.json \
+  --attempts 3
+```
+
+The command performs no planning call and needs no API key. Its one-way flow is:
+
+```text
+execution.json (untrusted)
+  → strict schema and payload-integrity validation
+  → plan/exploration/observation/graph linkage validation
+  → deterministic candidate extraction
+  → isolated Stage 5 scenario reruns
+  → failure/evidence signature analysis
+  → reproducibility, severity, and confidence policy
+  → findings and reports
+```
+
+Structural `FAIL` scenarios are primary candidates. A structurally passing scenario is selected
+only when it reproduced a step-attributed, same-origin page error, HTTP 5xx, relevant failed
+document/script/XHR/fetch request, or console error. Asset 404s, external analytics failures,
+console warnings, unattributed evidence, `BLOCKED`, and `ERROR` are not promoted to confirmed
+application defects. `BLOCKED` and source execution errors are retained as inconclusive context
+without automatic reruns.
+
+For the default three attempts, the deterministic policy is:
+
+- `CONFIRMED_DEFECT`: 3/3 valid attempts reproduce one identical signature.
+- `PROBABLE_DEFECT`: at least two valid attempts all reproduce one signature, but another requested
+  attempt was invalid.
+- `FLAKY_DEFECT`: the same signature appears in only part of at least two valid attempts.
+- `NOT_REPRODUCED`: no valid attempt repeats the source signal.
+- `INCONCLUSIVE`: fewer than two valid attempts, a safety/drift block, an infrastructure problem,
+  or multiple incompatible failure signatures prevent a defensible verdict.
+
+The source execution is shown separately and is never counted as one of the requested verification
+attempts. Every attempt calls the existing constrained executor for exactly one grounded scenario.
+It starts a fresh Playwright browser and BrowserContext, so cookies, local/session storage,
+IndexedDB, cache, permissions, pages, and service-worker state do not cross attempt boundaries.
+The same runtime semantic drift, form, scope, action-risk, locator-uniqueness, and graph assertion
+checks apply; verification has no mechanism to weaken Stage 5 safety.
+
+Signatures retain both raw and normalized forms. Normalization is deliberately narrow: obvious
+UUIDs, ISO timestamps, long request/run identifiers, localhost ports, fragments, and query order
+are normalized, while paths, query values, HTTP statuses, methods, failure codes, expected targets,
+and actual state fingerprints remain meaningful. Multiple incompatible signatures are not merged
+into a confirmed defect. Finding IDs are stable short hashes of the logical source signature.
+
+Severity is conservative and deterministic. Confirmed/probable HTTP 5xx findings are `HIGH` only
+for a `CRITICAL`/`HIGH` source scenario and otherwise `MEDIUM`;
+page errors and relevant failed requests are `MEDIUM`; structural mismatches are normally `MEDIUM`
+and reach `HIGH` only for a stable `CRITICAL` source scenario; console-only errors are capped at
+`LOW`; not-reproduced and inconclusive signals are `INFO`. Stage 4 priority is only one input and
+never establishes business impact by itself. Confidence is `VERY_HIGH` for confirmed, `HIGH` for
+probable, `MEDIUM` for flaky, `HIGH`/`MEDIUM` for not-reproduced depending on valid sample count,
+and `LOW` for inconclusive findings.
+
+Runtime evidence and screenshots are associated with findings, but association is explicitly not
+presented as causation. Stage 6 performs no root-cause analysis and makes no visual/pixel verdict.
+Canonical SHA-256 digests detect changed source artifacts and bind plan, observation, graphs,
+exploration, and execution payloads together. They provide integrity, not cryptographic author
+authenticity or provenance; there is no signing key.
+
+Each invocation creates a new verification tree and preserves per-attempt Stage 5 reports:
+
+```text
+artifacts/<run-id>/
+├── exploration.json
+├── planning/
+│   └── qa-plan.json
+├── executions/
+│   └── <execution-id>/
+│       └── execution.json
+└── verifications/
+    └── <verification-id>/
+        ├── verification.json
+        ├── findings.json
+        ├── verification.md
+        └── attempts/
+            └── <candidate-id>/
+                └── attempt-001/
+                    ├── execution.json
+                    ├── execution.md
+                    ├── trace.zip
+                    └── screenshots/
+```
+
+`verification.json` contains candidates, attempts, signature distributions, variance, timings,
+warnings, findings, and source digests. `findings.json` is the standalone defect-finding source of
+truth; `verification.md` is rendered locally without an LLM. Exit code `0` means no
+confirmed/probable/flaky finding, `1` means at least one such finding exists, and `2` means a
+verification/configuration/infrastructure failure or global verification timeout occurred.
 
 ## Architecture
 
-- `domain` — dependency-free page/state graphs, planning models, fingerprints, action
-  classification, URL scope, and safety rules.
-- `application` — inspect, page/state BFS, planning, integrity and grounding validation, deterministic
-  execution compilation, graph replay orchestration, evidence reproduction, and external ports.
+- `domain` — dependency-free page/state graphs, planning/execution/verification models,
+  fingerprints, signatures, action classification, URL scope, and safety rules.
+- `application` — inspect, page/state BFS, planning, integrity and grounding validation,
+  deterministic execution compilation, constrained reproduction orchestration, signature/verdict
+  policy, evidence matching, and external ports.
 - `browser` — Playwright adapters, semantic candidate capture, constrained graph action execution,
   runtime drift checks, evidence, isolation, popup/dialog/download handling, and trace cleanup.
 - `infrastructure` — centralized configuration, filesystem artifacts, run IDs, secret redaction,
@@ -358,14 +470,15 @@ npm test
 ```
 
 Integration tests host controlled local applications and a fake OpenAI-compatible provider. They
-exercise all CLI modes, including a real Chromium exploration-to-planning-to-execution pipeline,
-without public internet or API credentials.
+exercise all CLI modes, including a real Chromium
+exploration-to-planning-to-execution-to-verification pipeline, without public internet or API
+credentials.
 
 ## Roadmap
 
-1. Stage 6 evidence-based defect verdicts and reproducibility analysis.
-2. Playwright regression generation and defect triage.
-3. Rerun orchestration and HTML reporting.
+1. Stage 7 graph-backed Playwright regression test generation from confirmed findings.
+2. Defect triage/export integrations with explicit human approval boundaries.
+3. Visual analysis and HTML reporting as separate, evidence-preserving capabilities.
 
 ## License
 

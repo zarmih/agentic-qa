@@ -13,7 +13,9 @@ export type ErrorCode =
   | 'PLAN_GROUNDING_INVALID'
   | 'EXECUTION_SOURCE_INVALID'
   | 'EXECUTION_INTEGRITY_INVALID'
-  | 'EXECUTION_PLAN_INVALID';
+  | 'EXECUTION_PLAN_INVALID'
+  | 'VERIFICATION_SOURCE_INVALID'
+  | 'VERIFICATION_INTEGRITY_INVALID';
 
 export class AgenticQaError extends Error {
   public constructor(
@@ -141,5 +143,17 @@ export class ExecutionIntegrityError extends AgenticQaError {
 export class ExecutionPlanError extends AgenticQaError {
   public constructor(message: string) {
     super('EXECUTION_PLAN_INVALID', message);
+  }
+}
+
+export class VerificationSourceError extends AgenticQaError {
+  public constructor(message: string) {
+    super('VERIFICATION_SOURCE_INVALID', message);
+  }
+}
+
+export class VerificationIntegrityError extends AgenticQaError {
+  public constructor(message: string) {
+    super('VERIFICATION_INTEGRITY_INVALID', message);
   }
 }

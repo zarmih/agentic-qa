@@ -64,7 +64,7 @@ describe('execution evidence', () => {
     );
   });
 
-  it('matches source evidence exactly and marks unsupported comparisons not evaluated', () => {
+  it('matches normalized source evidence and marks unsupported comparisons not evaluated', () => {
     const runtime = [
       {
         id: 'runtime-1',
@@ -77,7 +77,7 @@ describe('execution evidence', () => {
         sourceStateId: null,
         actualStateId: null,
         url: 'http://fixture/',
-        message: '  Help   failed ',
+        message: '  Help request 832749 failed at 2026-08-28T00:00:00.000Z ',
         method: null,
         status: null,
         resourceType: null,
@@ -90,7 +90,7 @@ describe('execution evidence', () => {
           id: 'console-error-001',
           kind: 'CONSOLE_ERROR',
           severity: 'ERROR',
-          summary: 'help failed',
+          summary: 'help request 912003 failed at 2026-08-29T01:02:03.000Z',
           pageId: 'page-001',
           stateId: null,
           actionId: null,

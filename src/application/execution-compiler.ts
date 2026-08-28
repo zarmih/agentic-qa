@@ -57,6 +57,7 @@ export class ScenarioExecutionCompiler {
     plan: QaPlan,
     source: ExplorationResult,
     limits: ExecutionLimits,
+    scenarioIds?: readonly string[],
   ): CompiledExecutionPlan {
     const pages = new Map(source.graph.nodes.map((page) => [page.id, page]));
     const graph = source.stateGraph;
@@ -76,8 +77,23 @@ export class ScenarioExecutionCompiler {
     }
     const scope = new SameOriginScopePolicy(source.startUrl);
     const navigationSafety = new ConservativeNavigationSafetyPolicy();
+    const selectedScenarioIds = scenarioIds === undefined ? null : new Set(scenarioIds);
+    if (selectedScenarioIds !== null) {
+      const knownIds = new Set(plan.scenarios.map((scenario) => scenario.id));
+      const unknown = [...selectedScenarioIds].find((id) => !knownIds.has(id));
+      if (unknown !== undefined) {
+        throw new ExecutionPlanError(`Requested scenario "${unknown}" does not exist in the plan.`);
+      }
+      if (selectedScenarioIds.size === 0) {
+        throw new ExecutionPlanError('At least one scenario must be selected for execution.');
+      }
+    }
+    const sourceScenarios =
+      selectedScenarioIds === null
+        ? plan.scenarios
+        : plan.scenarios.filter((scenario) => selectedScenarioIds.has(scenario.id));
 
-    const automatable = plan.scenarios
+    const automatable = sourceScenarios
       .map((scenario, originalIndex) => ({ scenario, originalIndex }))
       .filter(({ scenario }) => scenario.executability === 'AUTOMATABLE')
       .sort(
@@ -90,7 +106,7 @@ export class ScenarioExecutionCompiler {
     );
     const limitReached = automatable.length > limits.maxScenarios ? ['maxScenarios'] : [];
 
-    const compiled = plan.scenarios.map((scenario, originalIndex): CompiledExecutionScenario => {
+    const compiled = sourceScenarios.map((scenario, originalIndex): CompiledExecutionScenario => {
       if (scenario.executability === 'MANUAL_ONLY') {
         return this.skipped(
           scenario,

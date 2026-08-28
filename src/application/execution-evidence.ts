@@ -5,6 +5,7 @@ import type {
 } from '../domain/execution.js';
 import type { InteractionEvidence } from '../domain/interaction.js';
 import type { PlanningEvidenceObservation } from '../domain/planning.js';
+import { normalizeDiagnosticText } from './evidence-normalization.js';
 
 export interface ExecutionEvidenceContext {
   readonly executionId: string;
@@ -17,10 +18,6 @@ export interface ExecutionEvidenceContext {
 }
 
 const MAX_EXECUTION_EVIDENCE_ENTRIES = 1_000;
-
-function normalized(value: string): string {
-  return value.trim().replaceAll(/\s+/g, ' ').toLowerCase();
-}
 
 export class ExecutionEvidenceCollector {
   private readonly entries: ExecutionEvidenceEntry[] = [];
@@ -162,7 +159,8 @@ export class EvidenceReproductionMatcher {
       const matching = runtime
         .filter(
           (entry) =>
-            entry.kind === expectedKind && normalized(entry.message) === normalized(source.summary),
+            entry.kind === expectedKind &&
+            normalizeDiagnosticText(entry.message) === normalizeDiagnosticText(source.summary),
         )
         .map((entry) => entry.id);
       return {

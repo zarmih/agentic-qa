@@ -3,6 +3,7 @@ import type { InspectionOutcome } from '../application/inspect-page.js';
 import type { ExplorationOutcome } from '../application/explore-application.js';
 import type { PlanQaOutcome } from '../application/plan-qa.js';
 import type { RunQaPlanOutcome } from '../application/run-qa-plan.js';
+import type { VerifyExecutionOutcome } from '../application/verify-execution.js';
 
 export interface Output {
   log(message: string): void;
@@ -130,6 +131,39 @@ export class ConsoleReporter {
         `${pc.dim('Artifacts')}   ${outcome.artifactDirectory}`,
       ].join('\n'),
     );
+  }
+
+  public verification(outcome: VerifyExecutionOutcome): void {
+    const { result } = outcome;
+    const lines = [
+      pc.bold(
+        outcome.exitCode === 0
+          ? pc.green('Agentic QA Verify complete')
+          : pc.yellow('Agentic QA Verify complete with findings'),
+      ),
+      '',
+      `${pc.dim('Source execution')} ${result.sourceExecutionId}`,
+      `${pc.dim('Verification')}     ${result.verificationId}`,
+      `${pc.dim('Candidates')}       ${String(result.summary.candidatesSelected)}`,
+      `${pc.dim('Attempts')}         ${String(result.summary.attemptsCompleted)}/${String(result.summary.attemptsRequested)} completed`,
+      '',
+      `${pc.dim('Confirmed')}        ${String(result.summary.confirmed)}`,
+      `${pc.dim('Probable')}         ${String(result.summary.probable)}`,
+      `${pc.dim('Flaky')}            ${String(result.summary.flaky)}`,
+      `${pc.dim('Not reproduced')}   ${String(result.summary.notReproduced)}`,
+      `${pc.dim('Inconclusive')}     ${String(result.summary.inconclusive)}`,
+    ];
+    for (const finding of result.findings.filter((item) =>
+      ['CONFIRMED_DEFECT', 'PROBABLE_DEFECT', 'FLAKY_DEFECT'].includes(item.verdict),
+    )) {
+      lines.push(
+        '',
+        `${finding.id}  ${finding.severity}  ${finding.verdict}  ${String(finding.profile.matchingAttempts)}/${String(finding.profile.validAttempts)}`,
+        finding.title,
+      );
+    }
+    lines.push('', `${pc.dim('Artifacts')}        ${outcome.artifactDirectory}`);
+    this.output.log(lines.join('\n'));
   }
 
   public failure(error: unknown, debug: boolean): void {

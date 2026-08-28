@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { executionExitCode } from '../../src/application/run-qa-plan.js';
+import { ExecutionIntegrityService } from '../../src/application/execution-integrity.js';
 import type { ExecutionRun } from '../../src/domain/execution.js';
 import { ExecutionMarkdownRenderer } from '../../src/reporting/execution-markdown.js';
 import { executionPlanFixture } from '../fixtures/execution-fixtures.js';
 
 function executionResult(): ExecutionRun {
   const { plan } = executionPlanFixture();
-  return {
-    schemaVersion: '1.0',
+  const result: Omit<ExecutionRun, 'executionIntegrity'> = {
+    schemaVersion: '1.1',
     executionId: 'exec-fixture',
     sourceRunId: plan.sourceRunId,
     planId: plan.planId,
@@ -86,6 +87,7 @@ function executionResult(): ExecutionRun {
       screenshotsDirectory: 'screenshots',
     },
   };
+  return { ...result, executionIntegrity: new ExecutionIntegrityService().create(result) };
 }
 
 describe('execution reporting', () => {

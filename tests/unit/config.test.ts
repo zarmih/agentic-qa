@@ -5,6 +5,7 @@ import {
   loadConfig,
   loadExecutionConfig,
   loadPlanningConfig,
+  loadVerificationConfig,
 } from '../../src/infrastructure/config.js';
 
 describe('loadConfig', () => {
@@ -198,5 +199,36 @@ describe('loadExecutionConfig', () => {
     ['AGENTIC_QA_STEP_TIMEOUT_MS', '249'],
   ])('rejects invalid execution setting %s', (key, value) => {
     expect(() => loadExecutionConfig({ [key]: value })).toThrow(ConfigurationError);
+  });
+});
+
+describe('loadVerificationConfig', () => {
+  it('uses bounded defaults and CLI precedence without any LLM configuration', () => {
+    expect(loadVerificationConfig({})).toMatchObject({
+      attempts: 3,
+      maxFindings: 10,
+      verifyTimeoutMs: 900_000,
+      headless: true,
+    });
+    expect(
+      loadVerificationConfig(
+        {
+          AGENTIC_QA_VERIFY_ATTEMPTS: '4',
+          AGENTIC_QA_MAX_VERIFY_FINDINGS: '8',
+          AGENTIC_QA_VERIFY_TIMEOUT_MS: '600000',
+        },
+        { attempts: '5', maxFindings: '6' },
+      ),
+    ).toMatchObject({ attempts: 5, maxFindings: 6, verifyTimeoutMs: 600_000 });
+  });
+
+  it.each([
+    ['AGENTIC_QA_VERIFY_ATTEMPTS', '1'],
+    ['AGENTIC_QA_VERIFY_ATTEMPTS', '11'],
+    ['AGENTIC_QA_MAX_VERIFY_FINDINGS', '0'],
+    ['AGENTIC_QA_MAX_VERIFY_FINDINGS', '51'],
+    ['AGENTIC_QA_VERIFY_TIMEOUT_MS', '999'],
+  ])('rejects invalid verification setting %s', (key, value) => {
+    expect(() => loadVerificationConfig({ [key]: value })).toThrow(ConfigurationError);
   });
 });
