@@ -3,11 +3,14 @@ import { Command } from 'commander';
 import { InspectPage } from '../application/inspect-page.js';
 import { ExploreApplication } from '../application/explore-application.js';
 import { PlanQa } from '../application/plan-qa.js';
+import { RunQaPlan } from '../application/run-qa-plan.js';
 import { PlaywrightExplorationBrowser } from '../browser/playwright-exploration-browser.js';
 import { PlaywrightPageInspector } from '../browser/playwright-page-inspector.js';
+import { PlaywrightScenarioExecutionBrowser } from '../browser/playwright-scenario-execution-browser.js';
 import { FileArtifactStore } from '../infrastructure/file-artifact-store.js';
+import { FileExecutionArtifacts } from '../infrastructure/file-execution-artifacts.js';
 import { FilePlanningArtifacts } from '../infrastructure/file-planning-artifacts.js';
-import { loadConfig, loadPlanningConfig } from '../infrastructure/config.js';
+import { loadConfig, loadExecutionConfig, loadPlanningConfig } from '../infrastructure/config.js';
 import { OpenAICompatibleReasoningProvider } from '../infrastructure/openai-compatible-reasoning-provider.js';
 import { SystemClock, TimestampRunIdGenerator } from '../infrastructure/run-id.js';
 import { ConsoleReporter } from '../reporting/console-reporter.js';
@@ -34,13 +37,21 @@ interface PlanCommandOptions {
   readonly llmTimeout?: string;
 }
 
+interface RunCommandOptions {
+  readonly exploration?: string;
+  readonly headed?: boolean;
+  readonly maxScenarios?: string;
+  readonly stepTimeout?: string;
+  readonly executionTimeout?: string;
+}
+
 const reporter = new ConsoleReporter();
 const program = new Command();
 
 program
   .name('agentic-qa')
-  .description('Inspect and explore web applications, then generate grounded QA plans.')
-  .version('0.4.0')
+  .description('Inspect and explore web applications, then plan and run constrained QA scenarios.')
+  .version('0.5.0')
   .showHelpAfterError();
 
 program
@@ -96,6 +107,49 @@ program
       model: config.model,
     });
     reporter.plan(outcome);
+  });
+
+program
+  .command('run')
+  .description('Execute validated AUTOMATABLE scenarios using graph-backed browser replay.')
+  .argument('<qa-plan-json>', 'path to a Stage 5 qa-plan.json artifact')
+  .option('--exploration <path>', 'explicit source exploration.json path')
+  .option('--headed', 'show the Chromium browser window')
+  .option('--max-scenarios <count>', 'maximum AUTOMATABLE scenarios to execute')
+  .option('--step-timeout <milliseconds>', 'maximum time for one browser action')
+  .option('--execution-timeout <milliseconds>', 'maximum duration of the execution run')
+  .action(async (path: string, commandOptions: RunCommandOptions) => {
+    try {
+      const config = loadExecutionConfig(process.env, {
+        headed: commandOptions.headed,
+        maxScenarios: commandOptions.maxScenarios,
+        stepTimeout: commandOptions.stepTimeout,
+        executionTimeout: commandOptions.executionTimeout,
+      });
+      const artifacts = new FileExecutionArtifacts();
+      const useCase = new RunQaPlan(
+        artifacts,
+        artifacts,
+        new PlaywrightScenarioExecutionBrowser(),
+        new TimestampRunIdGenerator(),
+        new SystemClock(),
+      );
+      const outcome = await useCase.execute(path, {
+        explorationPath: commandOptions.exploration,
+        headless: config.headless,
+        viewport: config.viewport,
+        navigationTimeoutMs: config.navigationTimeoutMs,
+        maxScenarios: config.maxScenarios,
+        maxStepsPerScenario: config.maxStepsPerScenario,
+        executionTimeoutMs: config.executionTimeoutMs,
+        stepTimeoutMs: config.stepTimeoutMs,
+      });
+      reporter.execution(outcome);
+      process.exitCode = outcome.exitCode;
+    } catch (error) {
+      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      process.exitCode = 2;
+    }
   });
 
 program

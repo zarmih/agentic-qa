@@ -11,6 +11,10 @@ const DEFAULT_MAX_STATES = 12;
 const DEFAULT_MAX_ACTIONS_PER_STATE = 4;
 const DEFAULT_MAX_STATE_DEPTH = 2;
 const DEFAULT_LLM_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_EXECUTION_SCENARIOS = 20;
+const DEFAULT_MAX_STEPS_PER_SCENARIO = 10;
+const DEFAULT_EXECUTION_TIMEOUT_MS = 300_000;
+const DEFAULT_STEP_TIMEOUT_MS = 5_000;
 
 export interface AppConfig {
   readonly navigationTimeoutMs: number;
@@ -49,6 +53,23 @@ export interface PlanningConfigOverrides {
   readonly provider?: string | undefined;
   readonly model?: string | undefined;
   readonly timeout?: string | undefined;
+}
+
+export interface ExecutionConfig {
+  readonly navigationTimeoutMs: number;
+  readonly headless: boolean;
+  readonly viewport: Viewport;
+  readonly maxScenarios: number;
+  readonly maxStepsPerScenario: number;
+  readonly executionTimeoutMs: number;
+  readonly stepTimeoutMs: number;
+}
+
+export interface ExecutionConfigOverrides {
+  readonly headed?: boolean | undefined;
+  readonly maxScenarios?: string | undefined;
+  readonly stepTimeout?: string | undefined;
+  readonly executionTimeout?: string | undefined;
 }
 
 function positiveInteger(name: string, raw: string | undefined, fallback: number): number {
@@ -211,6 +232,64 @@ export function loadPlanningConfig(
       DEFAULT_LLM_TIMEOUT_MS,
       100,
       300_000,
+    ),
+  };
+}
+
+export function loadExecutionConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+  overrides: ExecutionConfigOverrides = {},
+): ExecutionConfig {
+  return {
+    navigationTimeoutMs: integerInRange(
+      'Navigation timeout',
+      environment.AGENTIC_QA_NAVIGATION_TIMEOUT_MS,
+      DEFAULT_NAVIGATION_TIMEOUT_MS,
+      100,
+      300_000,
+    ),
+    headless: overrides.headed
+      ? false
+      : booleanValue('AGENTIC_QA_HEADLESS', environment.AGENTIC_QA_HEADLESS, true),
+    viewport: {
+      width: positiveInteger(
+        'AGENTIC_QA_VIEWPORT_WIDTH',
+        environment.AGENTIC_QA_VIEWPORT_WIDTH,
+        DEFAULT_VIEWPORT.width,
+      ),
+      height: positiveInteger(
+        'AGENTIC_QA_VIEWPORT_HEIGHT',
+        environment.AGENTIC_QA_VIEWPORT_HEIGHT,
+        DEFAULT_VIEWPORT.height,
+      ),
+    },
+    maxScenarios: integerInRange(
+      'Maximum execution scenarios',
+      overrides.maxScenarios ?? environment.AGENTIC_QA_MAX_EXECUTION_SCENARIOS,
+      DEFAULT_MAX_EXECUTION_SCENARIOS,
+      1,
+      50,
+    ),
+    maxStepsPerScenario: integerInRange(
+      'Maximum steps per scenario',
+      environment.AGENTIC_QA_MAX_STEPS_PER_SCENARIO,
+      DEFAULT_MAX_STEPS_PER_SCENARIO,
+      1,
+      20,
+    ),
+    executionTimeoutMs: integerInRange(
+      'Execution timeout',
+      overrides.executionTimeout ?? environment.AGENTIC_QA_EXECUTION_TIMEOUT_MS,
+      DEFAULT_EXECUTION_TIMEOUT_MS,
+      1_000,
+      3_600_000,
+    ),
+    stepTimeoutMs: integerInRange(
+      'Step timeout',
+      overrides.stepTimeout ?? environment.AGENTIC_QA_STEP_TIMEOUT_MS,
+      DEFAULT_STEP_TIMEOUT_MS,
+      250,
+      120_000,
     ),
   };
 }

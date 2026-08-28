@@ -63,7 +63,7 @@ describe('PlanQa', () => {
     });
 
     expect(outcome.plan).toMatchObject({
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       sourceRunId: 'run-planning-fixture',
       generatedAt: '2026-08-28T01:02:03.000Z',
       metadata: {

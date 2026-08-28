@@ -101,6 +101,14 @@ export interface PlanningTokenUsage {
   readonly totalTokens: number;
 }
 
+export interface SourceIntegrity {
+  readonly algorithm: 'SHA-256';
+  readonly explorationDigest: string;
+  readonly observationDigest: string;
+  readonly graphDigest: string;
+  readonly stateGraphDigest: string;
+}
+
 export interface PlanningTruncation {
   readonly truncated: boolean;
   readonly truncatedFields: readonly string[];
@@ -132,10 +140,11 @@ export interface QaPlanMetadata {
   readonly inputTruncation: PlanningTruncation;
   readonly usage: PlanningTokenUsage | null;
   readonly duplicateScenariosRemoved: number;
+  readonly sourceIntegrity: SourceIntegrity;
 }
 
 export interface QaPlan {
-  readonly schemaVersion: '1.0';
+  readonly schemaVersion: '1.1';
   readonly planId: string;
   readonly sourceRunId: string;
   readonly generatedAt: string;

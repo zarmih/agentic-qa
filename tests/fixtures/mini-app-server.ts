@@ -4,8 +4,23 @@ import { createServer, type Server } from 'node:http';
 export interface MiniAppServer {
   readonly baseUrl: string;
   counters(): Promise<Readonly<Record<string, number>>>;
+  setExecutionBehavior(behavior: Partial<ExecutionFixtureBehavior>): void;
   close(): Promise<void>;
 }
+
+export interface ExecutionFixtureBehavior {
+  readonly regression: 'stable' | 'wrong-state';
+  readonly menu: 'stable' | 'destructive-drift';
+  readonly missingAction: boolean;
+  readonly ambiguousAction: boolean;
+}
+
+const DEFAULT_EXECUTION_BEHAVIOR: ExecutionFixtureBehavior = {
+  regression: 'stable',
+  menu: 'stable',
+  missingAction: false,
+  ambiguousAction: false,
+};
 
 const COUNTER_NAMES = [
   'safe',
@@ -164,7 +179,92 @@ function interactivePage(): string {
   );
 }
 
-function respond(server: Server, counters: Record<CounterName, number>): void {
+function executionPage(behavior: ExecutionFixtureBehavior): string {
+  const menuName = behavior.menu === 'destructive-drift' ? 'Delete account' : 'Menu';
+  const missingControl = behavior.missingAction
+    ? ''
+    : '<button type="button" id="missing-action">Open missing panel</button>';
+  const ambiguousControl = behavior.ambiguousAction
+    ? '<button type="button" class="ambiguous-action">Open ambiguous panel</button><button type="button" class="ambiguous-action">Open ambiguous panel</button>'
+    : '<button type="button" class="ambiguous-action">Open ambiguous panel</button>';
+  return page(
+    'Execution fixture',
+    `<a href="/products">Products</a>
+    <button type="button" data-testid="execution-menu" aria-label="${menuName}" aria-expanded="false">${menuName}</button>
+    <nav id="execution-menu-panel" hidden><h2>Execution menu</h2></nav>
+    <button type="button" id="execution-help">Help</button>
+    <div role="dialog" aria-label="Execution help" id="execution-help-dialog" hidden>
+      <h2>Execution help content</h2><button type="button">Close</button>
+    </div>
+    <div role="tablist">
+      <button type="button" role="tab" aria-selected="true" data-tab="Overview">Overview</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="Details">Details</button>
+    </div>
+    <h2 id="execution-tab-panel">Overview panel</h2>
+    <button type="button" id="regression-action">Open regression panel</button>
+    ${missingControl}
+    ${ambiguousControl}
+    <button type="button" id="evidence-action">Open evidence panel</button>
+    <button type="button" id="storage-action">Open storage marker</button>
+    <hr>
+    <button type="button" data-danger="delete">Delete account</button>
+    <button type="button" data-danger="logout">Logout</button>
+    <button type="button" data-danger="buy">Buy now</button>
+    <button type="button" data-danger="checkout">Checkout</button>
+    <button type="button" data-danger="publish">Publish</button>
+    <button type="button" data-danger="reset">Reset database</button>
+    <button type="button" data-danger="unsubscribe">Unsubscribe</button>
+    <form method="post" action="/__submit"><input name="value"><button type="submit">Submit form</button></form>`,
+    `<script>
+      const safe = (name) => fetch('/__safe?name=' + encodeURIComponent(name)).catch(() => {});
+      if (localStorage.getItem('execution-contamination') === 'set') {
+        const stale = document.createElement('h2'); stale.textContent = 'Contaminated scenario'; document.body.append(stale);
+      }
+      const menu = document.querySelector('[data-testid="execution-menu"]');
+      menu.addEventListener('click', () => {
+        ${behavior.menu === 'destructive-drift' ? "fetch('/__danger?name=delete')" : "document.querySelector('#execution-menu-panel').hidden = false; menu.setAttribute('aria-expanded', 'true'); safe('execution-menu')"};
+      });
+      document.querySelector('#execution-help').addEventListener('click', () => {
+        document.querySelector('#execution-help-dialog').hidden = false; safe('execution-help');
+      });
+      document.querySelectorAll('[role="tab"]').forEach((tab) => tab.addEventListener('click', () => {
+        document.querySelectorAll('[role="tab"]').forEach((other) => other.setAttribute('aria-selected', String(other === tab)));
+        document.querySelector('#execution-tab-panel').textContent = tab.dataset.tab + ' panel'; safe('execution-tab');
+      }));
+      document.querySelector('#regression-action').addEventListener('click', () => {
+        const heading = document.createElement('h2');
+        heading.textContent = '${behavior.regression === 'wrong-state' ? 'Wrong regression state' : 'Expected regression state'}';
+        document.body.append(heading); safe('execution-regression');
+      });
+      document.querySelector('#missing-action')?.addEventListener('click', () => {
+        const heading = document.createElement('h2'); heading.textContent = 'Missing action state'; document.body.append(heading); safe('execution-missing');
+      });
+      document.querySelectorAll('.ambiguous-action').forEach((button) => button.addEventListener('click', () => {
+        const heading = document.createElement('h2'); heading.textContent = 'Ambiguous action state'; document.body.append(heading); safe('execution-ambiguous');
+      }));
+      document.querySelector('#evidence-action').addEventListener('click', () => {
+        const heading = document.createElement('h2'); heading.textContent = 'Evidence state'; document.body.append(heading);
+        console.error('execution fixture evidence error');
+        fetch('/interaction-500').catch(() => {});
+        fetch('http://127.0.0.1:1/execution-failure').catch(() => {});
+        safe('execution-evidence');
+      });
+      document.querySelector('#storage-action').addEventListener('click', () => {
+        localStorage.setItem('execution-contamination', 'set');
+        const heading = document.createElement('h2'); heading.textContent = 'Storage marker state'; document.body.append(heading); safe('execution-storage');
+      });
+      document.querySelectorAll('[data-danger]').forEach((button) => button.addEventListener('click', () => {
+        fetch('/__danger?name=' + encodeURIComponent(button.dataset.danger));
+      }));
+    </script>`,
+  );
+}
+
+function respond(
+  server: Server,
+  counters: Record<CounterName, number>,
+  executionBehavior: () => ExecutionFixtureBehavior,
+): void {
   server.on('request', (request, response) => {
     const url = new URL(request.url ?? '/', 'http://fixture.test');
     if (url.pathname === '/__counters') {
@@ -198,6 +298,11 @@ function respond(server: Server, counters: Record<CounterName, number>): void {
         'content-disposition': 'attachment; filename="sample.txt"',
       });
       response.end('safe fixture download');
+      return;
+    }
+    if (url.pathname === '/interaction-500') {
+      response.writeHead(500, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'controlled execution failure' }));
       return;
     }
     if (url.pathname === '/redirect') {
@@ -245,6 +350,9 @@ function respond(server: Server, counters: Record<CounterName, number>): void {
       case '/interactive/product/1':
         html = interactivePage();
         break;
+      case '/execution':
+        html = executionPage(executionBehavior());
+        break;
       case '/popup':
         html = page('Same-origin popup', '<p>Popup content</p>');
         break;
@@ -267,7 +375,8 @@ function respond(server: Server, counters: Record<CounterName, number>): void {
 export async function startMiniAppServer(): Promise<MiniAppServer> {
   const server = createServer();
   const counters = initialCounters();
-  respond(server, counters);
+  let executionBehavior = { ...DEFAULT_EXECUTION_BEHAVIOR };
+  respond(server, counters, () => executionBehavior);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
@@ -275,6 +384,9 @@ export async function startMiniAppServer(): Promise<MiniAppServer> {
   return {
     baseUrl: `http://127.0.0.1:${String(address.port)}`,
     counters: () => Promise.resolve({ ...counters }),
+    setExecutionBehavior(behavior) {
+      executionBehavior = { ...executionBehavior, ...behavior };
+    },
     async close() {
       server.close();
       await once(server, 'close');

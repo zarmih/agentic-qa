@@ -10,11 +10,15 @@ export interface ChromiumResources {
 export async function launchChromiumContext(options: {
   readonly headless: boolean;
   readonly viewport: Viewport;
+  readonly serviceWorkers?: 'allow' | 'block';
 }): Promise<ChromiumResources> {
   let browser: Browser | undefined;
   try {
     browser = await chromium.launch({ headless: options.headless });
-    const context = await browser.newContext({ viewport: options.viewport });
+    const context = await browser.newContext({
+      viewport: options.viewport,
+      ...(options.serviceWorkers === undefined ? {} : { serviceWorkers: options.serviceWorkers }),
+    });
     return { browser, context };
   } catch (error) {
     await browser?.close().catch(() => undefined);

@@ -50,7 +50,7 @@ function popupScope(url: string, baseUrl: string): PopupEvidence['scope'] {
   }
 }
 
-class NetworkActivityMonitor {
+export class NetworkActivityMonitor {
   private readonly active = new Set<Request>();
   private lastActivity = Date.now();
 
@@ -86,7 +86,7 @@ class NetworkActivityMonitor {
   }
 }
 
-async function discoverCandidates(page: Page): Promise<readonly InteractionCandidate[]> {
+export async function discoverCandidates(page: Page): Promise<readonly InteractionCandidate[]> {
   const raw = await page.locator(CANDIDATE_SELECTOR).evaluateAll((elements, maximum) => {
     return elements.slice(0, maximum).map((element) => {
       const html = element as HTMLElement;
@@ -190,7 +190,7 @@ async function discoverCandidates(page: Page): Promise<readonly InteractionCandi
   });
 }
 
-async function observe(page: Page): Promise<StateObservation> {
+export async function observePageState(page: Page): Promise<StateObservation> {
   const [title, headings, dialogs, candidates] = await Promise.all([
     page.title(),
     page.locator('h1, h2, h3, h4, h5, h6').evaluateAll((elements) =>
@@ -239,11 +239,11 @@ async function observe(page: Page): Promise<StateObservation> {
   return { url: page.url(), title: normalize(title), headings, dialogs, candidates };
 }
 
-async function screenshot(page: Page): Promise<Buffer> {
+export async function screenshotPage(page: Page): Promise<Buffer> {
   return page.screenshot({ fullPage: true, type: 'png' });
 }
 
-async function configureNavigationGuard(
+export async function configureNavigationGuard(
   page: Page,
   canNavigate: (url: string) => boolean,
 ): Promise<void> {
@@ -258,32 +258,34 @@ async function configureNavigationGuard(
   });
 }
 
-function locatorFor(page: Page, descriptor: ActionDescriptor['locator']): Locator {
+export function baseLocatorFor(page: Page, descriptor: ActionDescriptor['locator']): Locator {
   switch (descriptor.strategy) {
     case 'testId':
-      return page.getByTestId(descriptor.value).nth(descriptor.index);
+      return page.getByTestId(descriptor.value);
     case 'role':
-      return page
-        .getByRole(descriptor.role as Parameters<Page['getByRole']>[0], {
-          name: descriptor.name,
-          exact: true,
-        })
-        .nth(descriptor.index);
+      return page.getByRole(descriptor.role as Parameters<Page['getByRole']>[0], {
+        name: descriptor.name,
+        exact: true,
+      });
     case 'label':
-      return page.getByLabel(descriptor.value, { exact: true }).nth(descriptor.index);
+      return page.getByLabel(descriptor.value, { exact: true });
     case 'id':
-      return page.locator(`[id=${JSON.stringify(descriptor.value)}]`).nth(descriptor.index);
+      return page.locator(`[id=${JSON.stringify(descriptor.value)}]`);
     case 'text':
-      return page.getByText(descriptor.value, { exact: true }).nth(descriptor.index);
+      return page.getByText(descriptor.value, { exact: true });
   }
 }
 
-async function clickDescriptor(
+export function locatorForDescriptor(page: Page, descriptor: ActionDescriptor['locator']): Locator {
+  return baseLocatorFor(page, descriptor).nth(descriptor.index);
+}
+
+export async function clickDescriptor(
   page: Page,
   descriptor: ActionDescriptor,
   timeoutMs: number,
 ): Promise<void> {
-  const locator = locatorFor(page, descriptor.locator);
+  const locator = locatorForDescriptor(page, descriptor.locator);
   if ((await locator.count()) === 0)
     throw new Error('The replay locator no longer matches an element.');
   if (!(await locator.isVisible())) throw new Error('The replay locator is not visible.');
@@ -291,7 +293,10 @@ async function clickDescriptor(
   await locator.click({ timeout: timeoutMs });
 }
 
-async function settleAfterInteraction(page: Page, network: NetworkActivityMonitor): Promise<void> {
+export async function settleAfterInteraction(
+  page: Page,
+  network: NetworkActivityMonitor,
+): Promise<void> {
   await page
     .evaluate(
       ({ quietMs, maximumMs }) =>
@@ -332,10 +337,10 @@ export class InteractivePageController {
     page.on('popup', (popup) => void popup.close().catch(() => undefined));
     await configureNavigationGuard(page, request.canNavigate);
     await navigateAndSettle(page, request.url, request.navigationTimeoutMs);
-    const observation = await observe(page);
+    const observation = await observePageState(page);
     return {
       observation,
-      screenshot: await screenshot(page),
+      screenshot: await screenshotPage(page),
       timestamp: new Date().toISOString(),
       truncated: evidence.truncated || observation.candidates.length >= MAX_CANDIDATES_PER_STATE,
     };
@@ -408,7 +413,7 @@ export class InteractivePageController {
         await clickDescriptor(page, replayAction, request.actionTimeoutMs);
         await settleAfterInteraction(page, network);
       }
-      const sourceObservation = await observe(page);
+      const sourceObservation = await observePageState(page);
       if (this.fingerprints.create(sourceObservation).hash !== request.expectedSourceFingerprint) {
         return {
           status: 'BLOCKED',
@@ -450,13 +455,13 @@ export class InteractivePageController {
       await clickDescriptor(page, descriptor, request.actionTimeoutMs);
       await settleAfterInteraction(page, network);
       await Promise.allSettled(pendingEvents);
-      const observation = await observe(page);
+      const observation = await observePageState(page);
       return {
         status: 'COMPLETED',
         sourceUrl: sourceObservation.url,
         result: {
           observation,
-          screenshot: await screenshot(page),
+          screenshot: await screenshotPage(page),
           timestamp: new Date().toISOString(),
           truncated:
             collector.truncated || observation.candidates.length >= MAX_CANDIDATES_PER_STATE,

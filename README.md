@@ -6,15 +6,16 @@ tests, identify likely defects, and produce reproducible reports and regression 
 
 ## Current status
 
-Stage 4 provides single-page inspection, deterministic multi-page exploration, an explicitly
-enabled conservative UI-state explorer, and provider-neutral QA planning from saved exploration
-artifacts:
+Stage 5 provides single-page inspection, deterministic multi-page exploration, an explicitly
+enabled conservative UI-state explorer, provider-neutral QA planning, and constrained execution
+of validated plans:
 
 ```sh
 agentic-qa inspect https://example.com
 agentic-qa explore https://example.com --max-pages 20 --max-depth 3
 agentic-qa explore https://example.com --interactive
 agentic-qa plan artifacts/<run-id>/exploration.json --provider openai-compatible --model <model>
+agentic-qa run artifacts/<run-id>/planning/qa-plan.json
 ```
 
 `inspect` captures metadata and a screenshot for one page. Plain `explore` preserves the Stage 2
@@ -23,16 +24,17 @@ bounded browser evidence, with no button clicks. `--interactive` additionally ex
 same-page UI states through controls that a conservative classifier can prove safe.
 `plan` does not launch a browser. It compiles an existing Stage 3 artifact into bounded untrusted
 application data, asks a reasoning provider for structured scenarios, and validates the response
-before saving it.
+before saving it. `run` uses no LLM or provider connection: it executes only validated
+`AUTOMATABLE` scenarios through IDs and semantic descriptors already recorded in the source graph.
 
 HTTP 4xx/5xx responses are saved as valid inspection results with a warning. Invalid input,
 network failures, timeouts, browser startup failures, and artifact write failures return a
 human-readable CLI error and a non-zero exit code.
 
-Agentic QA does **not** yet execute generated QA plans, generate Playwright code, fill forms, handle
-authentication workflows, make defect verdicts, generate regression files, or provide an HTML
-dashboard. The LLM is a planner only and cannot access Playwright, browser sessions, the shell,
-the filesystem, or arbitrary tools.
+Agentic QA does **not** yet generate Playwright source code, fill forms, handle authentication
+workflows, make defect verdicts, generate regression files, or provide an HTML dashboard. The LLM
+is a planner only and cannot access Playwright, browser sessions, the shell, the filesystem, or
+arbitrary tools. Stage 5 execution remains deterministic and LLM-free.
 
 ## Requirements and installation
 
@@ -55,6 +57,7 @@ npm run inspect -- https://example.com
 npm run explore -- https://example.com --max-pages 20 --max-depth 3
 npm run explore -- https://example.com --interactive --max-states 12
 npm run plan -- artifacts/<run-id>/exploration.json --model <model>
+npm run run -- artifacts/<run-id>/planning/qa-plan.json
 ```
 
 Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally ignored by Git.
@@ -78,6 +81,10 @@ Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally i
 | `AGENTIC_QA_LLM_API_KEY`                 |       empty | Optional bearer key, read only from environment  |
 | `AGENTIC_QA_LLM_MODEL`                   |  _required_ | Model name when `--model` is not supplied        |
 | `AGENTIC_QA_LLM_TIMEOUT_MS`              |     `30000` | Bounded planning request timeout                 |
+| `AGENTIC_QA_MAX_EXECUTION_SCENARIOS`     |        `20` | AUTOMATABLE scenarios selected by priority       |
+| `AGENTIC_QA_MAX_STEPS_PER_SCENARIO`      |        `10` | Hard step cap for one execution scenario         |
+| `AGENTIC_QA_EXECUTION_TIMEOUT_MS`        |    `300000` | Bounded duration of an execution run             |
+| `AGENTIC_QA_STEP_TIMEOUT_MS`             |      `5000` | Bounded browser action timeout                   |
 | `AGENTIC_QA_DEBUG`                       |     `false` | Print diagnostic stack traces for CLI failures   |
 
 `inspect` and `explore` accept `--headed`, `--timeout <milliseconds>`, and
@@ -87,6 +94,9 @@ Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally i
 enabled only by `--interactive`; limit options override their corresponding environment values.
 `plan` accepts `--provider openai-compatible`, `--model`, and `--llm-timeout`. CLI model and timeout
 values override environment values. API keys intentionally have no CLI option.
+`run` accepts `--exploration`, `--headed`, `--max-scenarios`, `--step-timeout`, and
+`--execution-timeout`. `--exploration` is required when a copied plan is not in the standard
+`<run>/planning/qa-plan.json` layout. There is no unsafe, force-manual, or safety-disable option.
 
 ## Safe exploration behavior
 
@@ -228,18 +238,105 @@ artifacts/<run-id>/
 
 `qa-plan.json` is the source of truth. It includes provider/model metadata, request duration,
 optional token usage, repair count, truncation data, deterministic executability, coverage, and
-quality warnings. `qa-plan.md` is rendered locally from the validated plan; the provider is not
-asked to generate a separate report. API keys are never added to prompts, output, errors, or
-artifacts, and exact configured secret values are defensively redacted before persistence.
+quality warnings. Version 1.1 also binds the plan to the exact exploration, bounded observation,
+page graph, and state graph with canonical SHA-256 digests. `qa-plan.md` is rendered locally from
+the validated plan; the provider is not asked to generate a separate report. API keys are never
+added to prompts, output, errors, or artifacts, and exact configured secret values are defensively
+redacted before persistence.
+
+## Executing QA plans
+
+Run a completed plan from its standard artifact layout:
+
+```sh
+agentic-qa run artifacts/<run-id>/planning/qa-plan.json
+```
+
+For a copied/portable source-run bundle whose plan location no longer permits unambiguous
+inference, provide its `exploration.json` explicitly (the bound `observation.json`, `graph.json`,
+and `state-graph.json` must travel with the bundle):
+
+```sh
+agentic-qa run ./qa-plan.json --exploration ./exploration.json
+```
+
+Execution is a separate, provider-free pipeline:
+
+```text
+qa-plan.json (untrusted)
+  → strict schema + source SHA-256 validation
+  → fresh grounding, executability, safety, and graph validation
+  → deterministic scenario compiler
+  → isolated Playwright replay from the source graph
+  → runtime semantic safety validation
+  → URL/state-fingerprint assertions
+  → execution evidence and reports
+```
+
+Only `AUTOMATABLE` scenarios are eligible. `MANUAL_ONLY` and `UNSUPPORTED` scenarios remain in the
+report as `SKIPPED`. Stage 5 supports only `NAVIGATE` to an existing `pageId` and `CLICK` through an
+existing observed SAFE `actionId`; any unsupported step skips the whole scenario. Plan-provided
+URLs, CSS, XPath, text selectors, JavaScript, and natural-language instructions never become
+browser commands. Free-text objectives and expected outcomes are retained only as human context.
+
+Before every click, the runtime restores the source state from a clean page through the recorded
+semantic replay path, verifies fingerprints, requires one unique locator match, compares role,
+accessible name, type, href, relevant ARIA state, and form association, and re-runs the conservative
+risk classifier. Missing, ambiguous, stale, out-of-scope, form-associated, or semantically changed
+actions are `BLOCKED` before clicking. Destructive, caution, and unknown controls can never be
+forced. Cookies and permissions are cleared between scenarios, local/session storage is cleared by
+a fixed internal init script, service workers are blocked, and browser pages are closed after each
+step. Authentication and form-data workflows remain unsupported.
+
+Deterministic result meanings are:
+
+- `PASS` — every required graph-backed step ran and its URL/fingerprint assertion matched.
+- `FAIL` — the application reached a different observable URL or UI state than the source graph.
+- `BLOCKED` — runtime safety, drift, scope, uniqueness, or stale-source validation prevented an
+  action.
+- `ERROR` — a browser/executor infrastructure failure or bounded timeout prevented evaluation.
+- `SKIPPED` — a manual, unsupported, over-limit, or dependent step/scenario was not executed.
+
+Console errors and other evidence do not automatically turn a structurally correct transition
+into `FAIL`. They are retained as findings, attributed to scenario/step, and compared with cited
+source evidence using deterministic kind/message signatures. This separation leaves stronger
+defect verdicts to a later stage.
+
+Each invocation creates a new execution directory, so one source run can be executed repeatedly:
+
+```text
+artifacts/<run-id>/
+├── exploration.json
+├── graph.json
+├── state-graph.json
+├── planning/
+│   ├── observation.json
+│   ├── qa-plan.json
+│   └── qa-plan.md
+└── executions/
+    └── <execution-id>/
+        ├── execution.json
+        ├── execution.md
+        ├── trace.zip
+        └── screenshots/
+            └── scenario-001/
+                ├── 000-start.png
+                └── 001.png
+```
+
+`execution.json` is the source of truth; Markdown is rendered deterministically without an LLM.
+Exit code `0` means no FAIL/BLOCKED/ERROR, `1` means an application mismatch or safety block was
+reported, and `2` means an execution/configuration error. Legacy Stage 4 plans with schema 1.0 have
+no integrity metadata and are rejected with an explicit instruction to run `plan` again.
 
 ## Architecture
 
 - `domain` — dependency-free page/state graphs, planning models, fingerprints, action
   classification, URL scope, and safety rules.
-- `application` — inspect, page BFS, state BFS, replay orchestration, observation compilation,
-  provider/artifact ports, validation, plan safety, deduplication, and coverage analysis.
-- `browser` — Playwright adapters, semantic candidate capture, action execution, evidence, popup,
-  dialog, download, lifecycle, and trace cleanup.
+- `application` — inspect, page/state BFS, planning, integrity and grounding validation, deterministic
+  execution compilation, graph replay orchestration, evidence reproduction, and external ports.
+- `browser` — Playwright adapters, semantic candidate capture, constrained graph action execution,
+  runtime drift checks, evidence, isolation, popup/dialog/download handling, and trace cleanup.
 - `infrastructure` — centralized configuration, filesystem artifacts, run IDs, secret redaction,
   and the OpenAI-compatible HTTP adapter.
 - `reporting` — concise terminal output and deterministic Markdown rendering, separate from plan
@@ -261,15 +358,14 @@ npm test
 ```
 
 Integration tests host controlled local applications and a fake OpenAI-compatible provider. They
-exercise all CLI modes, including a real Chromium exploration-to-planning pipeline, without public
-internet or API credentials.
+exercise all CLI modes, including a real Chromium exploration-to-planning-to-execution pipeline,
+without public internet or API credentials.
 
 ## Roadmap
 
-1. A constrained Stage 5 executor for validated `AUTOMATABLE` scenarios, with no arbitrary LLM
-   browser control.
-2. Evidence-based run verdicts and reproducibility checks.
-3. Playwright regression generation, defect triage, reruns, and HTML reporting.
+1. Stage 6 evidence-based defect verdicts and reproducibility analysis.
+2. Playwright regression generation and defect triage.
+3. Rerun orchestration and HTML reporting.
 
 ## License
 

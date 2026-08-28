@@ -1,7 +1,11 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ConfigurationError } from '../../src/application/errors.js';
-import { loadConfig, loadPlanningConfig } from '../../src/infrastructure/config.js';
+import {
+  loadConfig,
+  loadExecutionConfig,
+  loadPlanningConfig,
+} from '../../src/infrastructure/config.js';
 
 describe('loadConfig', () => {
   it('provides ready-to-run defaults', () => {
@@ -152,5 +156,47 @@ describe('loadPlanningConfig', () => {
     ],
   ] as const)('rejects invalid planning configuration', (environment, overrides, message) => {
     expect(() => loadPlanningConfig(environment, overrides)).toThrow(message);
+  });
+});
+
+describe('loadExecutionConfig', () => {
+  it('provides conservative bounded defaults without LLM configuration', () => {
+    expect(loadExecutionConfig({})).toEqual({
+      navigationTimeoutMs: 30_000,
+      headless: true,
+      viewport: { width: 1440, height: 900 },
+      maxScenarios: 20,
+      maxStepsPerScenario: 10,
+      executionTimeoutMs: 300_000,
+      stepTimeoutMs: 5_000,
+    });
+  });
+
+  it('applies CLI precedence and environment hard limits', () => {
+    expect(
+      loadExecutionConfig(
+        {
+          AGENTIC_QA_MAX_EXECUTION_SCENARIOS: '10',
+          AGENTIC_QA_MAX_STEPS_PER_SCENARIO: '8',
+          AGENTIC_QA_EXECUTION_TIMEOUT_MS: '90000',
+          AGENTIC_QA_STEP_TIMEOUT_MS: '4000',
+        },
+        { maxScenarios: '6', stepTimeout: '2500', executionTimeout: '60000' },
+      ),
+    ).toMatchObject({
+      maxScenarios: 6,
+      maxStepsPerScenario: 8,
+      executionTimeoutMs: 60_000,
+      stepTimeoutMs: 2_500,
+    });
+  });
+
+  it.each([
+    ['AGENTIC_QA_MAX_EXECUTION_SCENARIOS', '0'],
+    ['AGENTIC_QA_MAX_STEPS_PER_SCENARIO', '21'],
+    ['AGENTIC_QA_EXECUTION_TIMEOUT_MS', '999'],
+    ['AGENTIC_QA_STEP_TIMEOUT_MS', '249'],
+  ])('rejects invalid execution setting %s', (key, value) => {
+    expect(() => loadExecutionConfig({ [key]: value })).toThrow(ConfigurationError);
   });
 });

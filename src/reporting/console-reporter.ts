@@ -2,6 +2,7 @@ import pc from 'picocolors';
 import type { InspectionOutcome } from '../application/inspect-page.js';
 import type { ExplorationOutcome } from '../application/explore-application.js';
 import type { PlanQaOutcome } from '../application/plan-qa.js';
+import type { RunQaPlanOutcome } from '../application/run-qa-plan.js';
 
 export interface Output {
   log(message: string): void;
@@ -101,6 +102,32 @@ export class ConsoleReporter {
         `Error states      ${String(plan.coverage.errorBearingStates.covered)}/${String(plan.coverage.errorBearingStates.total)}`,
         '',
         `${pc.dim('Artifacts')} ${outcome.artifactDirectory}`,
+      ].join('\n'),
+    );
+  }
+
+  public execution(outcome: RunQaPlanOutcome): void {
+    const { result } = outcome;
+    this.output.log(
+      [
+        pc.bold(
+          outcome.exitCode === 0
+            ? pc.green('Agentic QA Run complete')
+            : pc.yellow('Agentic QA Run complete with findings'),
+        ),
+        '',
+        `${pc.dim('Plan')}        ${result.planId}`,
+        `${pc.dim('Execution')}   ${result.executionId}`,
+        `${pc.dim('Automatable')} ${String(result.summary.automatableScenarios)}`,
+        `${pc.dim('Skipped')}     ${String(result.summary.skipped)}`,
+        '',
+        `${pc.dim('PASS')}        ${String(result.summary.passed)}`,
+        `${pc.dim('FAIL')}        ${String(result.summary.failed)}`,
+        `${pc.dim('BLOCKED')}     ${String(result.summary.blocked)}`,
+        `${pc.dim('ERROR')}       ${String(result.summary.errors)}`,
+        '',
+        `${pc.dim('Evidence')}    ${String(result.summary.evidenceReproduced)}/${String(result.summary.evidenceEvaluated)} reproduced`,
+        `${pc.dim('Artifacts')}   ${outcome.artifactDirectory}`,
       ].join('\n'),
     );
   }

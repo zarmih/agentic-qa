@@ -1,5 +1,5 @@
 import type { ExplorationResult } from '../../src/domain/exploration.js';
-import type { InteractionCandidate } from '../../src/domain/interaction.js';
+import { actionDescriptor, type InteractionCandidate } from '../../src/domain/interaction.js';
 import type { ProposedQaPlan } from '../../src/domain/planning.js';
 
 const timestamp = '2026-08-28T00:00:00.000Z';
@@ -33,6 +33,8 @@ function candidate(id: string, accessibleName: string, order: number): Interacti
 export function planningExplorationFixture(): ExplorationResult {
   const help = candidate('candidate-001', 'Help', 0);
   const deleteAccount = candidate('candidate-002', 'Delete account', 1);
+  const helpAction = actionDescriptor(help);
+  if (helpAction === null) throw new Error('Fixture Help candidate must be replayable.');
   return {
     schemaVersion: '3.0',
     runId: 'run-planning-fixture',
@@ -148,7 +150,7 @@ export function planningExplorationFixture(): ExplorationResult {
           title: 'Fixture',
           depth: 1,
           discoveredFromActionId: 'action-0001',
-          actionPath: [],
+          actionPath: [helpAction],
           metadata: {
             title: 'fixture',
             headings: ['help dialog'],
@@ -163,14 +165,7 @@ export function planningExplorationFixture(): ExplorationResult {
           id: 'action-0001',
           sourceStateId: 'state-001',
           targetStateId: 'state-002',
-          action: {
-            actionType: 'click',
-            identity: 'help-action',
-            locator: { strategy: 'role', role: 'button', name: 'Help', index: 0 },
-            role: 'button',
-            accessibleName: 'Help',
-            visibleText: 'Help',
-          },
+          action: helpAction,
           risk: 'SAFE',
           urlBefore: 'http://fixture.test/',
           urlAfter: 'http://fixture.test/',

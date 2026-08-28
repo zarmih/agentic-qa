@@ -1,6 +1,6 @@
 {
   "name": "agentic-qa",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "An open-source foundation for autonomous web application quality assurance.",
   "type": "module",
   "bin": {
@@ -21,7 +21,8 @@
     "test": "vitest run",
     "inspect": "tsx src/cli/index.ts inspect",
     "explore": "tsx src/cli/index.ts explore",
-    "plan": "tsx src/cli/index.ts plan"
+    "plan": "tsx src/cli/index.ts plan",
+    "run": "tsx src/cli/index.ts run"
   },
   "keywords": [
     "qa",

@@ -10,7 +10,10 @@ export type ErrorCode =
   | 'PROVIDER_TIMEOUT'
   | 'PROVIDER_BAD_RESPONSE'
   | 'PLAN_SCHEMA_INVALID'
-  | 'PLAN_GROUNDING_INVALID';
+  | 'PLAN_GROUNDING_INVALID'
+  | 'EXECUTION_SOURCE_INVALID'
+  | 'EXECUTION_INTEGRITY_INVALID'
+  | 'EXECUTION_PLAN_INVALID';
 
 export class AgenticQaError extends Error {
   public constructor(
@@ -120,5 +123,23 @@ export class PlanGroundingInvalidError extends AgenticQaError {
       'PLAN_GROUNDING_INVALID',
       `The proposed plan contains invalid graph references: ${errors.join('; ')}`,
     );
+  }
+}
+
+export class ExecutionSourceError extends AgenticQaError {
+  public constructor(message: string) {
+    super('EXECUTION_SOURCE_INVALID', message);
+  }
+}
+
+export class ExecutionIntegrityError extends AgenticQaError {
+  public constructor(message: string) {
+    super('EXECUTION_INTEGRITY_INVALID', message);
+  }
+}
+
+export class ExecutionPlanError extends AgenticQaError {
+  public constructor(message: string) {
+    super('EXECUTION_PLAN_INVALID', message);
   }
 }

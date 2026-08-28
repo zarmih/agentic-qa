@@ -18,6 +18,7 @@ import {
   PlanningScenarioDeduplicator,
 } from './planning-safety-policy.js';
 import { parsePlanningResponse, PlanningSchemaValidationError } from './planning-schema.js';
+import { SourceIntegrityService } from './source-integrity.js';
 
 export interface PlanQaOptions {
   readonly provider: 'openai-compatible';
@@ -58,6 +59,7 @@ export class PlanQa {
   private readonly executability = new PlanningExecutabilityPolicy();
   private readonly coverage = new PlanningCoverageAnalyzer();
   private readonly markdown = new QaPlanMarkdownRenderer();
+  private readonly integrity = new SourceIntegrityService();
 
   public constructor(
     private readonly provider: QaReasoningProvider,
@@ -124,7 +126,7 @@ export class PlanQa {
       );
     }
     const plan: QaPlan = {
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       planId: planId(loaded.exploration.runId, scenarios),
       sourceRunId: loaded.exploration.runId,
       generatedAt: this.clock.now().toISOString(),
@@ -145,6 +147,7 @@ export class PlanQa {
         inputTruncation: compiled.observation.truncation,
         usage: aggregateUsage(responses),
         duplicateScenariosRemoved: deduplicated.duplicatesRemoved,
+        sourceIntegrity: this.integrity.create(loaded.exploration, compiled.observation),
       },
     };
     await this.writer.savePlan(loaded.runDirectory, plan, this.markdown.render(plan));
