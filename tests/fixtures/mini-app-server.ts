@@ -5,6 +5,7 @@ export interface MiniAppServer {
   readonly baseUrl: string;
   counters(): Promise<Readonly<Record<string, number>>>;
   verificationAttempts(): Promise<Readonly<Record<VerificationScenarioName, number>>>;
+  pipelineAttempts(): Promise<Readonly<Record<'stable' | 'healthy', number>>>;
   setExecutionBehavior(behavior: Partial<ExecutionFixtureBehavior>): void;
   setVerificationMode(mode: VerificationFixtureMode): void;
   close(): Promise<void>;
@@ -306,6 +307,38 @@ function verificationHomePage(): string {
   );
 }
 
+function pipelinePage(): string {
+  return page(
+    'Pipeline fixture',
+    `<p>Untrusted report text: &lt;script&gt;alert(&quot;pipeline&quot;)&lt;/script&gt;</p>
+    <button type="button" data-testid="pipeline-stable">Open stable panel</button>
+    <button type="button" data-testid="pipeline-healthy">Open healthy panel</button>
+    <section id="pipeline-result" aria-live="polite"></section>
+    <button type="button" data-danger="delete">Delete account</button>
+    <button type="button" data-danger="logout">Logout</button>
+    <button type="button" data-danger="buy">Buy now</button>
+    <button type="button" data-danger="checkout">Checkout</button>
+    <button type="button" data-danger="publish">Publish</button>
+    <button type="button" data-danger="reset">Reset database</button>
+    <button type="button" data-danger="unsubscribe">Unsubscribe</button>
+    <form method="post" action="/__submit"><input name="value"><button type="submit">Submit form</button></form>`,
+    `<script>
+      for (const name of ['stable', 'healthy']) {
+        document.querySelector('[data-testid="pipeline-' + name + '"]').addEventListener('click', async () => {
+          const response = await fetch('/__pipeline-action?name=' + name);
+          const result = await response.json();
+          const heading = document.createElement('h2');
+          heading.textContent = result.heading;
+          document.querySelector('#pipeline-result').replaceChildren(heading);
+        });
+      }
+      document.querySelectorAll('[data-danger]').forEach((button) => button.addEventListener('click', () => {
+        fetch('/__danger?name=' + encodeURIComponent(button.dataset.danger));
+      }));
+    </script>`,
+  );
+}
+
 function verificationPage(name: VerificationScenarioName, mode: VerificationFixtureMode): string {
   const labels: Readonly<Record<VerificationScenarioName, string>> = {
     stable: 'Open stable panel',
@@ -395,6 +428,7 @@ function respond(
   executionBehavior: () => ExecutionFixtureBehavior,
   verificationMode: () => VerificationFixtureMode,
   verificationAttempts: Record<VerificationScenarioName, number>,
+  pipelineAttempts: Record<'stable' | 'healthy', number>,
 ): void {
   server.on('request', (request, response) => {
     const url = new URL(request.url ?? '/', 'http://fixture.test');
@@ -426,6 +460,23 @@ function respond(
       );
       response.writeHead(outcome.status, { 'content-type': 'application/json' });
       response.end(JSON.stringify(outcome));
+      return;
+    }
+    if (url.pathname === '/__pipeline-action') {
+      const name = url.searchParams.get('name');
+      if (name !== 'stable' && name !== 'healthy') {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: 'unknown pipeline scenario' }));
+        return;
+      }
+      pipelineAttempts[name] += 1;
+      counters.safe += 1;
+      const heading =
+        name === 'stable' && pipelineAttempts[name] > 1
+          ? 'Wrong stable pipeline state'
+          : `Expected ${name} pipeline state`;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ heading }));
       return;
     }
     if (url.pathname === '/verification/navigation') {
@@ -517,6 +568,9 @@ function respond(
       case '/verification':
         html = verificationHomePage();
         break;
+      case '/pipeline':
+        html = pipelinePage();
+        break;
       case '/verification/navigation-wrong':
         html = page('Wrong navigation target', '<a href="/verification">Back</a>');
         break;
@@ -552,12 +606,14 @@ export async function startMiniAppServer(): Promise<MiniAppServer> {
   let executionBehavior = { ...DEFAULT_EXECUTION_BEHAVIOR };
   let verificationMode: VerificationFixtureMode = 'baseline';
   const verificationAttempts = initialVerificationAttempts();
+  const pipelineAttempts = { stable: 0, healthy: 0 };
   respond(
     server,
     counters,
     () => executionBehavior,
     () => verificationMode,
     verificationAttempts,
+    pipelineAttempts,
   );
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -567,6 +623,7 @@ export async function startMiniAppServer(): Promise<MiniAppServer> {
     baseUrl: `http://127.0.0.1:${String(address.port)}`,
     counters: () => Promise.resolve({ ...counters }),
     verificationAttempts: () => Promise.resolve({ ...verificationAttempts }),
+    pipelineAttempts: () => Promise.resolve({ ...pipelineAttempts }),
     setExecutionBehavior(behavior) {
       executionBehavior = { ...executionBehavior, ...behavior };
     },

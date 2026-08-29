@@ -1,7 +1,7 @@
-import type { RegressionManifest } from '../domain/regression.js';
+import type { SavedRegressionManifest } from '../domain/regression.js';
 
 export class RegressionReadmeRenderer {
-  public render(manifest: RegressionManifest): string {
+  public render(manifest: SavedRegressionManifest): string {
     const files = manifest.tests.flatMap((entry) =>
       entry.file === null ? [] : [`- \`${entry.file}\` — ${entry.status}`],
     );

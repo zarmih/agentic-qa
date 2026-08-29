@@ -1,55 +1,30 @@
 # Agentic QA
 
-Agentic QA is an open-source project for autonomous, evidence-based quality assurance of web
-applications. The long-term goal is an agent that can explore an application, plan and execute
-tests, identify likely defects, and produce reproducible reports and regression tests.
+Agentic QA is an open-source CLI for evidence-based web application QA. It explores a site with
+real Chromium, asks a provider-neutral LLM only to propose a grounded test plan, executes that plan
+through deterministic graph references, verifies reproducibility, generates reviewable
+Playwright regressions, and exports them only after explicit human approval.
 
-## Current status
+Current version: **0.8.0**. This is a pre-1.0 engineering release, not an npm-published package.
 
-Stage 7 provides single-page inspection, deterministic multi-page exploration, an explicitly
-enabled conservative UI-state explorer, provider-neutral QA planning, constrained execution of
-validated plans, deterministic defect verification, and reviewable Playwright regression
-generation:
+## What it can do
 
-```sh
-agentic-qa inspect https://example.com
-agentic-qa explore https://example.com --max-pages 20 --max-depth 3
-agentic-qa explore https://example.com --interactive
-agentic-qa plan artifacts/<run-id>/exploration.json --provider openai-compatible --model <model>
-agentic-qa run artifacts/<run-id>/planning/qa-plan.json
-agentic-qa verify artifacts/<run-id>/executions/<execution-id>/execution.json --attempts 3
-agentic-qa generate artifacts/<run-id>/verifications/<verification-id>/findings.json
-```
+- inspect one page or deterministically explore same-origin pages and safe UI states;
+- collect screenshots, Playwright traces, console/page/network/HTTP evidence, and page/state graphs;
+- create a bounded structured QA plan through an OpenAI-compatible HTTP adapter;
+- execute only grounded `AUTOMATABLE` `NAVIGATE`/`CLICK` scenarios without an LLM;
+- distinguish confirmed, probable, flaky, not-reproduced, and inconclusive signals;
+- generate portable Playwright TypeScript specs that fail on the verified regression and pass on
+  the observed healthy state;
+- produce a static local HTML report and safely preview/apply regression export into a TypeScript
+  Playwright project.
 
-`inspect` captures metadata and a screenshot for one page. Plain `explore` preserves the Stage 2
-behavior: deterministic BFS over safe same-origin links, a serializable application graph, and
-bounded browser evidence, with no button clicks. `--interactive` additionally explores meaningful
-same-page UI states through controls that a conservative classifier can prove safe.
-`plan` does not launch a browser. It compiles an existing Stage 3 artifact into bounded untrusted
-application data, asks a reasoning provider for structured scenarios, and validates the response
-before saving it. `run` uses no LLM or provider connection: it executes only validated
-`AUTOMATABLE` scenarios through IDs and semantic descriptors already recorded in the source graph.
-`verify` is also LLM-free. It selects structural failures and significant reproduced error
-evidence, repeats only the relevant grounded scenarios in isolated browser contexts, and produces
-conservative reproducibility verdicts and defect findings.
-`generate` is LLM-free and does not launch the target application. It revalidates the entire
-source chain, compiles only graph-backed `NAVIGATE`/`CLICK` paths into a typed regression IR, and
-renders isolated Playwright specs for human review.
+It does **not** fill forms, handle authentication or credentials, infer root cause, analyze pixels,
+fix application code, publish packages, create issues/PRs, or commit/push target repositories.
 
-HTTP 4xx/5xx responses are saved as valid inspection results with a warning. Invalid input,
-network failures, timeouts, browser startup failures, and artifact write failures return a
-human-readable CLI error and a non-zero exit code.
+## Five-minute quick start
 
-Agentic QA does **not** yet fill forms, handle authentication workflows, infer root causes,
-automatically copy/commit/push generated tests, create issues or pull requests, analyze
-screenshots, or provide an HTML dashboard. The LLM is a planner only and cannot access Playwright, browser
-sessions, the shell, the filesystem, or arbitrary tools. Execution and verification remain
-deterministic and LLM-free.
-
-## Requirements and installation
-
-- Node.js 24 LTS or newer
-- npm
+Requirements: Node.js 24 LTS or newer and npm.
 
 ```sh
 git clone https://github.com/zarmih/agentic-qa.git
@@ -57,22 +32,72 @@ cd agentic-qa
 npm install
 npx playwright install chromium
 npm run build
-npm link                 # optional: exposes the agentic-qa command locally
+npm link # optional; exposes agentic-qa locally
 ```
 
-During development, run the command without linking:
+Configure an OpenAI-compatible planning endpoint (the API key is optional for explicitly
+unauthenticated local endpoints), then run the bounded product pipeline:
 
 ```sh
-npm run inspect -- https://example.com
-npm run explore -- https://example.com --max-pages 20 --max-depth 3
-npm run explore -- https://example.com --interactive --max-states 12
-npm run plan -- artifacts/<run-id>/exploration.json --model <model>
-npm run run -- artifacts/<run-id>/planning/qa-plan.json
-npm run verify -- artifacts/<run-id>/executions/<execution-id>/execution.json
-npm run generate -- artifacts/<run-id>/verifications/<verification-id>/findings.json
+export AGENTIC_QA_LLM_BASE_URL=http://127.0.0.1:11434/v1
+export AGENTIC_QA_LLM_MODEL=my-model
+export AGENTIC_QA_LLM_API_KEY= # omit when authentication is not required
+
+agentic-qa pipeline http://localhost:3000 \
+  --provider openai-compatible \
+  --model my-model
 ```
 
-Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally ignored by Git.
+The pipeline stops after regression generation. Review the artifacts, preview export, then apply
+only when the plan is correct:
+
+```sh
+agentic-qa export artifacts/<run-id>/regressions/<generation-id>/manifest.json \
+  --target ../my-web-app
+
+agentic-qa export artifacts/<run-id>/regressions/<generation-id>/manifest.json \
+  --target ../my-web-app \
+  --apply
+```
+
+The first command is a dry run and does not modify the target. Artifacts are stored in
+`artifacts/<run-id>/` by default and are intentionally ignored by Git.
+
+## Safety model
+
+```text
+Browser observation (untrusted website data)
+        ↓
+LLM planning (no browser, shell, filesystem, or tools)
+        ↓ schema + grounding + deterministic safety
+Constrained LLM-free execution and verification
+        ↓
+Deterministic regression IR and escaped TypeScript
+        ↓
+Dry-run export preview
+        ↓ explicit --apply
+Human-approved target write
+```
+
+Website text, plans, execution files, findings, manifests, and generated source are all treated as
+untrusted input at their boundaries. Destructive/caution/unknown actions, forms, arbitrary URLs,
+arbitrary selectors, and model-provided code never execute. SHA-256 detects artifact changes but
+is not a digital signature or proof of author identity.
+
+## Manual pipeline
+
+```sh
+agentic-qa inspect https://example.com
+agentic-qa explore https://example.com --interactive
+agentic-qa plan artifacts/<run-id>/exploration.json --model <model>
+agentic-qa run artifacts/<run-id>/planning/qa-plan.json
+agentic-qa verify artifacts/<run-id>/executions/<execution-id>/execution.json --attempts 3
+agentic-qa generate artifacts/<run-id>/verifications/<verification-id>/findings.json
+agentic-qa export artifacts/<run-id>/regressions/<generation-id>/manifest.json --target ../app
+```
+
+During development, prefix commands with the corresponding npm script, for example
+`npm run explore -- <url> --interactive` or `npm run pipeline -- <url> --model <model>`.
 
 ## Configuration
 
@@ -103,6 +128,7 @@ Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally i
 | `AGENTIC_QA_MAX_GENERATED_TESTS`               |        `20` | Maximum generated regression specs               |
 | `AGENTIC_QA_MAX_GENERATED_STEPS_PER_TEST`      |        `12` | Hard graph-action cap per generated spec         |
 | `AGENTIC_QA_MAX_GENERATED_ASSERTIONS_PER_TEST` |         `5` | Hard assertion cap per generated spec            |
+| `AGENTIC_QA_EXPORT_VALIDATION_TIMEOUT_MS`      |     `30000` | Bounded optional target Playwright list timeout  |
 | `AGENTIC_QA_DEBUG`                             |     `false` | Print diagnostic stack traces for CLI failures   |
 
 `inspect` and `explore` accept `--headed`, `--timeout <milliseconds>`, and
@@ -120,6 +146,12 @@ standard `<run>/executions/<execution-id>/execution.json` layout so source linka
 `generate` accepts `--max-tests`, `--include-flaky`, and an optional HTTP(S) origin-only
 `--base-url`. Origin substitution preserves graph-owned paths and queries; unsupported protocols,
 credentials, paths, queries, and fragments in the override are rejected.
+`pipeline` accepts the `quick`, `standard`, or `thorough` profile plus focused overrides for page
+count, state count, verification attempts, and generated-test count. CLI values override
+environment values, which override profile values. `export` accepts `--tests-dir`, `--apply`,
+`--overwrite`, `--validate`, and `--json`; overwrite and validation are invalid without `--apply`.
+`pipeline --json` and `export --json` reserve stdout for one JSON document. Use global
+`--no-color` or `NO_COLOR` for plain CI logs.
 
 ## Safe exploration behavior
 
@@ -514,26 +546,155 @@ artifacts/<run-id>/
             └── DEF-705553CE.spec.ts
 ```
 
-`manifest.json` records generated, fixme, review-only, unsupported, over-limit, and duplicate
-outcomes, source-chain digests, spec digests, assertions, and limits. Generation exit code `0`
+`manifest.json` schema 1.1 records generated, fixme, review-only, unsupported, over-limit, and duplicate
+outcomes, source-chain digests, spec digests, assertions, limits, and a canonical payload digest.
+Stage 7 schema 1.0 manifests remain exportable only after the entire source chain, deterministic
+compilation, source bytes, assertions, and per-file digests are revalidated; legacy input is never
+silently trusted. Generation exit code `0`
 means generation completed without eligible review/unsupported items, `1` means artifacts were
 created but a probable or supported-verdict candidate still requires review, and `2` means source,
 integrity, configuration, or generation validation failed. As elsewhere in the project, SHA-256
 detects content changes; it is not author authentication or a digital signature.
 
+## Unified pipeline
+
+`pipeline` composes the existing application services in process; it does not shell out to its own
+CLI or introduce another exploration/execution engine:
+
+```sh
+agentic-qa pipeline http://localhost:3000 \
+  --profile standard \
+  --provider openai-compatible \
+  --model my-model
+```
+
+| Profile    | Pages | Page depth | States | Actions/state | State depth | Verify attempts | Findings | Specs |
+| ---------- | ----: | ---------: | -----: | ------------: | ----------: | --------------: | -------: | ----: |
+| `quick`    |     5 |          1 |      8 |             3 |           1 |               2 |        5 |     5 |
+| `standard` |    25 |          3 |     12 |             4 |           2 |               3 |       10 |    20 |
+| `thorough` |    50 |          4 |     25 |             6 |           3 |               5 |       20 |    40 |
+
+The command always uses interactive safe exploration and then runs `plan → run → verify →
+generate`. Application mismatches (`run` exit 1) and defect findings (`verify` exit 1) are useful
+pipeline outcomes and do not stop later stages. Configuration, provider, integrity, browser, or
+artifact infrastructure failures do stop the flow. `pipeline.json` records every stage as `PASS`,
+`COMPLETED_WITH_FINDINGS`, `FAILED`, or `NOT_RUN`, along with timings, summaries, errors, and
+relative artifact references. Final status is `COMPLETE_NO_DEFECTS`, `COMPLETE_WITH_FINDINGS`,
+`COMPLETE_WITH_REGRESSIONS`, or `FAILED`.
+
+Pipeline never exports into another repository. Generation remains the terminal automatic stage;
+export is always a separate human decision.
+
+## Human-approved regression export
+
+Preview an export plan without changing the target:
+
+```sh
+agentic-qa export artifacts/<run-id>/regressions/<generation-id>/manifest.json \
+  --target ../my-playwright-app
+```
+
+Apply only the new, non-conflicting files after review:
+
+```sh
+agentic-qa export <manifest-json> --target ../my-playwright-app --apply
+```
+
+An existing different file is never replaced unless both approval flags are present:
+
+```sh
+agentic-qa export <manifest-json> --target ../my-playwright-app --apply --overwrite
+```
+
+Target inspection is static and bounded. It reads `package.json`, lockfiles, `tsconfig.json`, the
+supported `playwright.config.{ts,js,mts,mjs}` filename/content, common test directories, and
+read-only Git metadata. It never imports or evaluates the Playwright config during preview. The
+destination priority is `--tests-dir`, a statically readable config `testDir`, an existing common
+directory, then `tests`; specs always go into a dedicated `agentic-qa/` child directory.
+
+TypeScript Playwright projects are fully supported. A missing `@playwright/test` declaration is
+`REVIEW_REQUIRED`; JavaScript-only targets are `UNSUPPORTED` for automatic apply because generated
+specs are TypeScript. Package manager detection is informational—no dependency is installed and
+`package.json` is never modified.
+
+Each destination is classified as `NEW`, `IDENTICAL`, `MODIFIED_GENERATED`, or `CONFLICT` with a
+bounded unified diff. Absolute/traversal/tilde/backslash/NUL paths and any symlink in the export
+ancestry are rejected. Writes use exclusive creation or explicit atomic replacement, followed by
+SHA-256 verification. Export never runs Git mutation, package scripts, hooks, installs, commits,
+pushes, remote calls, or pull-request creation.
+
+`--validate` is allowed only with `--apply`. It invokes the target's already installed local
+Playwright CLI with a fixed executable/argument array, `shell: false`, a bounded timeout, and
+`test <exported-files> --list`. This lists/loads specs and target config but does not launch a
+browser or run the regressions. Because loading a Playwright config is target code execution,
+validation is an explicit opt-in and should be used only with a trusted target repository.
+
+Export planning and receipts remain beside the generation:
+
+```text
+regressions/<generation-id>/
+├── manifest.json
+├── tests/
+└── exports/
+    └── <export-id>/
+        ├── export-plan.json
+        └── export-receipt.json  # only after --apply
+```
+
+Receipts contain sanitized target identity/profile, previous/new hashes, written/skipped files,
+validation output, and read-only Git review output. They do not store an absolute home path.
+
+## Static HTML report
+
+Every unified pipeline writes `pipeline.json` and `report.html` at the source-run root. The report
+contains overview/timings, exploration, plan coverage/priorities, execution statuses, verification
+verdicts, findings and associated evidence, relative screenshot links, and generated spec digests.
+JSON artifacts remain the source of truth.
+
+The renderer is deterministic, framework-free, has no JavaScript/CDN/network dependency, emits a
+strict CSP, escapes `<`, `>`, `&`, quotes and apostrophes from all captured application/provider
+text, and accepts only safe relative local links. Copying the whole source-run directory preserves
+report links. Rerender without a browser or provider:
+
+```sh
+agentic-qa report artifacts/<run-id>
+# or: agentic-qa report artifacts/<run-id>/pipeline.json
+```
+
+## CLI output and exit codes
+
+`pipeline --json` and `export --json` emit one JSON document to stdout; failures go to stderr.
+`--no-color` and `NO_COLOR` make terminal output stable for CI.
+
+| Commands                     | `0`                                 | `1`                                                | `2`                                  |
+| ---------------------------- | ----------------------------------- | -------------------------------------------------- | ------------------------------------ |
+| `inspect`, `explore`, `plan` | completed                           | CLI/input/runtime failure for legacy commands      | —                                    |
+| `report`                     | rendered                            | —                                                  | report source/infrastructure failure |
+| `run`                        | no mismatch/block/error             | application mismatch or safety block               | executor/config/infrastructure error |
+| `verify`                     | no confirmed/probable/flaky finding | defect finding exists                              | verification/infrastructure error    |
+| `generate`                   | generation complete                 | review/unsupported eligible item                   | source/generation error              |
+| `export`                     | clean preview/apply                 | conflicts, warnings, review, or validation failure | source/target/config failure         |
+| `pipeline`                   | complete with no defect signal      | complete with findings/regressions                 | failed infrastructure stage          |
+
+Commander usage errors return non-zero and print help. Existing Stage 1–4 commands retain their
+historical exit behavior for compatibility.
+
 ## Architecture
 
 - `domain` — dependency-free page/state graphs, planning/execution/verification models, typed
-  regression IR, fingerprints, signatures, action classification, URL scope, and safety rules.
+  regression/export/pipeline models, fingerprints, signatures, action classification, URL scope,
+  and safety rules.
 - `application` — inspect, page/state BFS, planning, integrity and grounding validation,
   deterministic execution compilation, constrained reproduction orchestration, signature/verdict
-  policy, evidence matching, regression eligibility/compilation, and external ports.
+  policy, evidence matching, regression eligibility/compilation, target inspection, export
+  planning, pipeline orchestration, report rerendering, and external ports.
 - `browser` — Playwright adapters, semantic candidate capture, constrained graph action execution,
   runtime drift checks, evidence, isolation, popup/dialog/download handling, and trace cleanup.
 - `infrastructure` — centralized configuration, filesystem artifacts, run IDs, secret redaction,
-  generated TypeScript validation, and the OpenAI-compatible HTTP adapter.
-- `reporting` — concise terminal output plus deterministic Markdown and TypeScript rendering,
-  separate from plan generation.
+  generated TypeScript validation, static target probing/safe writes, pipeline artifact loading,
+  and the OpenAI-compatible HTTP adapter.
+- `reporting` — concise terminal output plus deterministic Markdown, TypeScript, and escaped static
+  HTML rendering, separate from plan generation.
 - `cli` — command parsing and composition root.
 
 The domain and application layers import neither Playwright nor an LLM SDK. Additional model
@@ -552,15 +713,16 @@ npm test
 
 Integration tests host controlled local applications and a fake OpenAI-compatible provider. They
 exercise all CLI modes, including a real Chromium
-exploration-to-planning-to-execution-to-verification-to-generation pipeline. Generated UI,
-navigation, and HTTP specs are compiled and run against controlled bug/healthy modes with real
-Chromium, without public internet or API credentials.
+exploration-to-planning-to-execution-to-verification-to-generation pipeline and human-approved
+target export. Generated UI, navigation, and HTTP specs are compiled and run against controlled
+bug/healthy modes with real Chromium, without public internet or API credentials.
 
 ## Roadmap
 
-1. Stage 8 human-approved regression export and target-project integration preview.
-2. Defect triage/export integrations with explicit human approval boundaries.
-3. Visual analysis and HTML reporting as separate, evidence-preserving capabilities.
+The next milestone is Stage 9: final v1.0 readiness audit. It should focus on public API/schema
+stability, cross-platform packaging/install matrices, documentation and threat-model review,
+performance/flakiness baselines, release automation design, and a go/no-go decision. It must not
+publish, tag, or create a release without a separate explicit approval.
 
 ## License
 

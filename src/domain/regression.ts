@@ -114,8 +114,7 @@ export interface RegressionGenerationSummary {
   readonly totalGeneratedLines: number;
 }
 
-export interface RegressionManifest {
-  readonly schemaVersion: '1.0';
+export interface RegressionManifestPayload {
   readonly generationId: string;
   readonly sourceRunId: string;
   readonly verificationId: string;
@@ -140,6 +139,22 @@ export interface RegressionManifest {
     readonly stateGraphDigest: string;
   };
 }
+
+export interface RegressionManifestIntegrity {
+  readonly algorithm: 'SHA-256';
+  readonly payloadDigest: string;
+}
+
+export interface RegressionManifest extends RegressionManifestPayload {
+  readonly schemaVersion: '1.1';
+  readonly generationIntegrity: RegressionManifestIntegrity;
+}
+
+export interface LegacyRegressionManifest extends RegressionManifestPayload {
+  readonly schemaVersion: '1.0';
+}
+
+export type SavedRegressionManifest = RegressionManifest | LegacyRegressionManifest;
 
 export interface RegressionGenerationLimits {
   readonly maxGeneratedTests: number;

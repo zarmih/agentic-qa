@@ -11,6 +11,11 @@ import type {
 import type { RegressionManifest } from '../../src/domain/regression.js';
 import { TypeScriptRegressionValidator } from '../../src/infrastructure/typescript-regression-validator.js';
 import { PrettierRegressionFormatter } from '../../src/infrastructure/prettier-regression-formatter.js';
+import {
+  RegressionManifestIntegrityService,
+  regressionManifestPayload,
+} from '../../src/application/regression-integrity.js';
+import { parseSavedRegressionManifest } from '../../src/application/regression-schema.js';
 import { regressionSourceFixture } from '../fixtures/regression-fixtures.js';
 
 class MemoryWriter implements RegressionArtifactWriter {
@@ -79,7 +84,25 @@ describe('GenerateRegressions', () => {
       result.manifest.tests[0]?.fileDigest,
     );
     expect(result.manifest.sourceIntegrity.findingsDigest).toMatch(/^[a-f0-9]{64}$/);
+    expect(result.manifest.schemaVersion).toBe('1.1');
+    expect(new RegressionManifestIntegrityService().validate(result.manifest)).toBe(true);
+    expect(parseSavedRegressionManifest(result.manifest)).toEqual(result.manifest);
     expect(writer.readme).toContain('Review every file');
+  });
+
+  it('detects manifest payload tampering while retaining explicit legacy parsing', async () => {
+    const { result } = await generate('confirmed');
+    const tampered = {
+      ...result.manifest,
+      summary: { ...result.manifest.summary, generated: 0 },
+    };
+    expect(new RegressionManifestIntegrityService().validate(tampered)).toBe(false);
+    expect(
+      parseSavedRegressionManifest({
+        ...regressionManifestPayload(result.manifest),
+        schemaVersion: '1.0',
+      }).schemaVersion,
+    ).toBe('1.0');
   });
 
   it('does not create active specs for probable or not-reproduced findings', async () => {

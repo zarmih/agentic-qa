@@ -1,7 +1,7 @@
 {
   "name": "agentic-qa",
-  "version": "0.7.0",
-  "description": "An open-source foundation for autonomous web application quality assurance.",
+  "version": "0.8.0",
+  "description": "Safe browser QA exploration, planning, verification, regression generation, and human-approved export.",
   "type": "module",
   "bin": {
     "agentic-qa": "dist/cli/index.js"
@@ -24,7 +24,10 @@
     "plan": "tsx src/cli/index.ts plan",
     "run": "tsx src/cli/index.ts run",
     "verify": "tsx src/cli/index.ts verify",
-    "generate": "tsx src/cli/index.ts generate"
+    "generate": "tsx src/cli/index.ts generate",
+    "export": "tsx src/cli/index.ts export",
+    "pipeline": "tsx src/cli/index.ts pipeline",
+    "report": "tsx src/cli/index.ts report"
   },
   "keywords": [
     "qa",

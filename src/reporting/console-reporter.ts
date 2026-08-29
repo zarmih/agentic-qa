@@ -5,6 +5,9 @@ import type { PlanQaOutcome } from '../application/plan-qa.js';
 import type { RunQaPlanOutcome } from '../application/run-qa-plan.js';
 import type { VerifyExecutionOutcome } from '../application/verify-execution.js';
 import type { GenerateRegressionsOutcome } from '../application/generate-regressions.js';
+import type { ExportRegressionsOutcome } from '../application/export-regressions.js';
+import type { RunPipelineOutcome } from '../application/run-pipeline.js';
+import type { RenderPipelineReportOutcome } from '../application/render-pipeline-report.js';
 
 export interface Output {
   log(message: string): void;
@@ -12,9 +15,13 @@ export interface Output {
 }
 
 export class ConsoleReporter {
-  public constructor(private readonly output: Output = console) {}
+  public constructor(
+    private readonly output: Output = console,
+    private readonly colors: ReturnType<typeof pc.createColors> = pc,
+  ) {}
 
   public success(outcome: InspectionOutcome): void {
+    const pc = this.colors;
     const { result } = outcome;
     const status = result.page.status === null ? 'unavailable' : String(result.page.status);
     const lines = [
@@ -35,6 +42,7 @@ export class ConsoleReporter {
   }
 
   public exploration(outcome: ExplorationOutcome): void {
+    const pc = this.colors;
     const { result } = outcome;
     const lines = [
       pc.bold(pc.green('Agentic QA Exploration complete')),
@@ -77,6 +85,7 @@ export class ConsoleReporter {
   }
 
   public plan(outcome: PlanQaOutcome): void {
+    const pc = this.colors;
     const { plan } = outcome;
     const priorities = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
     const executability = { AUTOMATABLE: 0, MANUAL_ONLY: 0, UNSUPPORTED: 0 };
@@ -109,6 +118,7 @@ export class ConsoleReporter {
   }
 
   public execution(outcome: RunQaPlanOutcome): void {
+    const pc = this.colors;
     const { result } = outcome;
     this.output.log(
       [
@@ -135,6 +145,7 @@ export class ConsoleReporter {
   }
 
   public verification(outcome: VerifyExecutionOutcome): void {
+    const pc = this.colors;
     const { result } = outcome;
     const lines = [
       pc.bold(
@@ -168,6 +179,7 @@ export class ConsoleReporter {
   }
 
   public regressionGeneration(outcome: GenerateRegressionsOutcome): void {
+    const pc = this.colors;
     const { manifest } = outcome;
     const files = manifest.tests.flatMap((entry) => (entry.file === null ? [] : [entry.file]));
     this.output.log(
@@ -192,7 +204,119 @@ export class ConsoleReporter {
     );
   }
 
+  public regressionExport(outcome: ExportRegressionsOutcome, json: boolean): void {
+    if (json) {
+      this.output.log(
+        JSON.stringify(
+          {
+            plan: outcome.plan,
+            receipt: outcome.receipt,
+            artifactDirectory: outcome.artifactDirectory,
+            exitCode: outcome.exitCode,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    const pc = this.colors;
+    const { plan } = outcome;
+    const lines = [
+      pc.bold(pc.green('Agentic QA Regression Export')),
+      '',
+      `${pc.dim('Mode')}        ${plan.mode}${plan.mode === 'DRY_RUN' ? ' (target unchanged)' : ''}`,
+      `${pc.dim('Target')}      ${plan.target.identifier}`,
+      `${pc.dim('Playwright')}  ${plan.target.playwrightDependency ? 'detected' : 'not detected'}`,
+      `${pc.dim('Destination')} ${plan.target.destinationDirectory}`,
+      `${pc.dim('Support')}     ${plan.target.support}`,
+      '',
+      pc.bold('Specs:'),
+      ...plan.entries.map((entry) => `${entry.status.padEnd(18)} ${entry.destination}`),
+      '',
+      `${pc.dim('Changes')}     ${String(plan.summary.changesToApply)}`,
+      `${pc.dim('Conflicts')}   ${String(plan.summary.conflicts + plan.summary.modifiedGenerated)}`,
+      `${pc.dim('Blocked')}     ${String(plan.summary.blocked)}`,
+    ];
+    for (const entry of plan.entries) {
+      if (entry.diff !== null) lines.push('', pc.bold(`Diff: ${entry.destination}`), entry.diff);
+    }
+    if (outcome.receipt !== null) {
+      lines.push(
+        '',
+        `${pc.dim('Validation')}  ${outcome.receipt.validation.status}`,
+        `${pc.dim('Files')}       ${
+          outcome.receipt.files.map((entry) => `${entry.action}:${entry.destination}`).join(', ') ||
+          'none'
+        }`,
+      );
+      if (outcome.receipt.gitReview.length > 0) {
+        lines.push('', pc.bold('Git review:'), ...outcome.receipt.gitReview);
+      }
+    }
+    if (plan.warnings.length > 0) {
+      lines.push('', ...plan.warnings.map((warning) => pc.yellow(`Warning: ${warning}`)));
+    }
+    lines.push('', `${pc.dim('Artifacts')}   ${outcome.artifactDirectory}`);
+    this.output.log(lines.join('\n'));
+  }
+
+  public pipeline(outcome: RunPipelineOutcome, json: boolean): void {
+    if (json) {
+      this.output.log(
+        JSON.stringify(
+          {
+            pipeline: outcome.pipeline,
+            artifactDirectory: outcome.artifactDirectory,
+            reportFile: outcome.reportFile,
+            exitCode: outcome.exitCode,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    const pc = this.colors;
+    const lines = [
+      pc.bold(
+        outcome.pipeline.status === 'FAILED'
+          ? pc.red('Agentic QA Pipeline failed')
+          : outcome.pipeline.status === 'COMPLETE_NO_DEFECTS'
+            ? pc.green('Agentic QA Pipeline complete')
+            : pc.yellow('Agentic QA Pipeline complete with findings'),
+      ),
+      '',
+      `${pc.dim('Target')}  ${outcome.pipeline.target}`,
+      `${pc.dim('Profile')} ${outcome.pipeline.profile}`,
+      '',
+      ...outcome.pipeline.stages.flatMap((stage) => [
+        `${stage.name.padEnd(10)} ${stage.status.padEnd(26)} ${String(stage.durationMs)} ms`,
+        ...Object.entries(stage.summary).map(([key, value]) => `  ${key}: ${String(value)}`),
+        ...(stage.error === null ? [] : [`  error: ${stage.error}`]),
+      ]),
+      '',
+      `${pc.dim('Result')}  ${outcome.pipeline.status}`,
+      `${pc.dim('Report')}  ${outcome.reportFile}`,
+    ];
+    this.output.log(lines.join('\n'));
+  }
+
+  public report(outcome: RenderPipelineReportOutcome): void {
+    const pc = this.colors;
+    this.output.log(
+      [
+        pc.bold(pc.green('Agentic QA Report rendered')),
+        '',
+        `${pc.dim('Pipeline')} ${outcome.pipelineId}`,
+        `${pc.dim('Status')}   ${outcome.status}`,
+        `${pc.dim('Report')}   ${outcome.reportFile}`,
+      ].join('\n'),
+    );
+  }
+
   public failure(error: unknown, debug: boolean): void {
+    const pc = this.colors;
     const message = error instanceof Error ? error.message : 'An unexpected error occurred.';
     this.output.error(`${pc.red(pc.bold('Agentic QA failed:'))} ${message}`);
 

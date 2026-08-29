@@ -7,6 +7,11 @@ import { RunQaPlan } from '../application/run-qa-plan.js';
 import { ConstrainedScenarioReproducer } from '../application/constrained-scenario-reproducer.js';
 import { VerifyExecution } from '../application/verify-execution.js';
 import { GenerateRegressions } from '../application/generate-regressions.js';
+import { ExportRegressions } from '../application/export-regressions.js';
+import { RegressionExportSourceValidator } from '../application/regression-export-source-validator.js';
+import { TargetProjectInspector } from '../application/target-project-inspector.js';
+import { RunPipeline } from '../application/run-pipeline.js';
+import { RenderPipelineReport } from '../application/render-pipeline-report.js';
 import { PlaywrightExplorationBrowser } from '../browser/playwright-exploration-browser.js';
 import { PlaywrightPageInspector } from '../browser/playwright-page-inspector.js';
 import { PlaywrightScenarioExecutionBrowser } from '../browser/playwright-scenario-execution-browser.js';
@@ -15,18 +20,29 @@ import { FileExecutionArtifacts } from '../infrastructure/file-execution-artifac
 import { FilePlanningArtifacts } from '../infrastructure/file-planning-artifacts.js';
 import { FileVerificationArtifacts } from '../infrastructure/file-verification-artifacts.js';
 import { FileRegressionArtifacts } from '../infrastructure/file-regression-artifacts.js';
+import { FileRegressionExportArtifacts } from '../infrastructure/file-regression-export-artifacts.js';
+import { FileTargetProject } from '../infrastructure/file-target-project.js';
+import { FilePipelineArtifacts } from '../infrastructure/file-pipeline-artifacts.js';
 import {
   loadConfig,
   loadExecutionConfig,
   loadPlanningConfig,
   loadVerificationConfig,
   loadRegressionConfig,
+  loadExportConfig,
 } from '../infrastructure/config.js';
 import { OpenAICompatibleReasoningProvider } from '../infrastructure/openai-compatible-reasoning-provider.js';
 import { SystemClock, TimestampRunIdGenerator } from '../infrastructure/run-id.js';
 import { ConsoleReporter } from '../reporting/console-reporter.js';
 import { TypeScriptRegressionValidator } from '../infrastructure/typescript-regression-validator.js';
 import { PrettierRegressionFormatter } from '../infrastructure/prettier-regression-formatter.js';
+import { PipelineHtmlRenderer } from '../reporting/pipeline-html.js';
+import {
+  PIPELINE_PROFILE_LIMITS,
+  PIPELINE_PROFILES,
+  type PipelineProfile,
+} from '../domain/pipeline.js';
+import pc from 'picocolors';
 
 interface InspectCommandOptions {
   readonly headed?: boolean;
@@ -70,15 +86,40 @@ interface GenerateCommandOptions {
   readonly baseUrl?: string;
 }
 
-const reporter = new ConsoleReporter();
+interface ExportCommandOptions {
+  readonly target: string;
+  readonly testsDir?: string;
+  readonly apply?: boolean;
+  readonly overwrite?: boolean;
+  readonly validate?: boolean;
+  readonly validationTimeout?: string;
+  readonly json?: boolean;
+}
+
+interface PipelineCommandOptions {
+  readonly profile: PipelineProfile;
+  readonly provider: string;
+  readonly model?: string;
+  readonly headed?: boolean;
+  readonly artifactsDir?: string;
+  readonly maxPages?: string;
+  readonly maxStates?: string;
+  readonly attempts?: string;
+  readonly maxTests?: string;
+  readonly json?: boolean;
+}
+
+const colorsEnabled = !process.argv.includes('--no-color') && process.env.NO_COLOR === undefined;
+const reporter = new ConsoleReporter(console, pc.createColors(colorsEnabled));
 const program = new Command();
 
 program
   .name('agentic-qa')
   .description(
-    'Inspect and explore web applications, then plan, run, verify, and generate constrained regressions.',
+    'Explore web applications, verify defects, generate regressions, and export them with human approval.',
   )
-  .version('0.7.0')
+  .version('0.8.0')
+  .option('--no-color', 'disable ANSI color output (NO_COLOR is also respected)')
   .showHelpAfterError();
 
 program
@@ -257,6 +298,238 @@ program
       });
       reporter.regressionGeneration(outcome);
       process.exitCode = outcome.exitCode;
+    } catch (error) {
+      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      process.exitCode = 2;
+    }
+  });
+
+program
+  .command('export')
+  .description('Preview or apply a human-approved export into an existing Playwright project.')
+  .argument('<manifest-json>', 'path to a Stage 7 regression manifest.json artifact')
+  .requiredOption('--target <directory>', 'target project directory')
+  .option('--tests-dir <path>', 'target test directory relative to the project root')
+  .option('--apply', 'write planned files into the target project')
+  .option('--overwrite', 'replace conflicting files; requires --apply')
+  .option('--validate', 'list exported specs with the target Playwright CLI; requires --apply')
+  .option('--validation-timeout <milliseconds>', 'bounded target validation timeout')
+  .option('--json', 'write only machine-readable JSON to stdout')
+  .action(async (path: string, commandOptions: ExportCommandOptions) => {
+    try {
+      const config = loadExportConfig(process.env, {
+        validationTimeout: commandOptions.validationTimeout,
+      });
+      const fileArtifacts = new FileRegressionExportArtifacts();
+      const target = new FileTargetProject();
+      const formatter = new PrettierRegressionFormatter();
+      const useCase = new ExportRegressions(
+        fileArtifacts,
+        new RegressionExportSourceValidator(formatter),
+        new TargetProjectInspector(target),
+        target,
+        fileArtifacts,
+        new TimestampRunIdGenerator(),
+        new SystemClock(),
+      );
+      const outcome = await useCase.execute(path, {
+        targetPath: commandOptions.target,
+        ...(commandOptions.testsDir === undefined
+          ? {}
+          : { testsDirectory: commandOptions.testsDir }),
+        apply: commandOptions.apply === true,
+        overwrite: commandOptions.overwrite === true,
+        validate: commandOptions.validate === true,
+        validationTimeoutMs: config.validationTimeoutMs,
+      });
+      reporter.regressionExport(outcome, commandOptions.json === true);
+      process.exitCode = outcome.exitCode;
+    } catch (error) {
+      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      process.exitCode = 2;
+    }
+  });
+
+program
+  .command('pipeline')
+  .description('Run explore, plan, execute, verify, generate, and render a static report.')
+  .argument('<url>', 'absolute http:// or https:// URL')
+  .option(
+    '--profile <profile>',
+    'bounded pipeline profile: quick, standard, or thorough',
+    'standard',
+  )
+  .option('--provider <kind>', 'reasoning provider protocol', 'openai-compatible')
+  .option('--model <model>', 'model name; overrides AGENTIC_QA_LLM_MODEL')
+  .option('--headed', 'show Chromium during browser stages')
+  .option('--artifacts-dir <path>', 'directory in which pipeline artifacts are stored')
+  .option('--max-pages <count>', 'override the profile page limit')
+  .option('--max-states <count>', 'override the profile UI-state limit')
+  .option('--attempts <count>', 'override verification attempts')
+  .option('--max-tests <count>', 'override generated regression limit')
+  .option('--json', 'write only machine-readable JSON to stdout')
+  .action(async (url: string, commandOptions: PipelineCommandOptions) => {
+    try {
+      if (!PIPELINE_PROFILES.includes(commandOptions.profile)) {
+        throw new Error(`Pipeline profile must be one of: ${PIPELINE_PROFILES.join(', ')}.`);
+      }
+      const limits = PIPELINE_PROFILE_LIMITS[commandOptions.profile];
+      const profileEnvironment: NodeJS.ProcessEnv = {
+        ...process.env,
+        AGENTIC_QA_MAX_PAGES: process.env.AGENTIC_QA_MAX_PAGES ?? String(limits.maxPages),
+        AGENTIC_QA_MAX_DEPTH: process.env.AGENTIC_QA_MAX_DEPTH ?? String(limits.maxDepth),
+        AGENTIC_QA_MAX_STATES: process.env.AGENTIC_QA_MAX_STATES ?? String(limits.maxStates),
+        AGENTIC_QA_MAX_ACTIONS_PER_STATE:
+          process.env.AGENTIC_QA_MAX_ACTIONS_PER_STATE ?? String(limits.maxActionsPerState),
+        AGENTIC_QA_MAX_STATE_DEPTH:
+          process.env.AGENTIC_QA_MAX_STATE_DEPTH ?? String(limits.maxStateDepth),
+        AGENTIC_QA_VERIFY_ATTEMPTS:
+          process.env.AGENTIC_QA_VERIFY_ATTEMPTS ?? String(limits.verificationAttempts),
+        AGENTIC_QA_MAX_VERIFY_FINDINGS:
+          process.env.AGENTIC_QA_MAX_VERIFY_FINDINGS ?? String(limits.maxVerifyFindings),
+        AGENTIC_QA_MAX_GENERATED_TESTS:
+          process.env.AGENTIC_QA_MAX_GENERATED_TESTS ?? String(limits.maxGeneratedTests),
+      };
+      const explorationConfig = loadConfig(profileEnvironment, process.cwd(), {
+        headed: commandOptions.headed,
+        artifactsDirectory: commandOptions.artifactsDir,
+        maxPages: commandOptions.maxPages,
+        maxStates: commandOptions.maxStates,
+      });
+      const planningConfig = loadPlanningConfig(profileEnvironment, {
+        provider: commandOptions.provider,
+        model: commandOptions.model,
+      });
+      const executionConfig = loadExecutionConfig(profileEnvironment, {
+        headed: commandOptions.headed,
+      });
+      const verificationConfig = loadVerificationConfig(profileEnvironment, {
+        headed: commandOptions.headed,
+        attempts: commandOptions.attempts,
+      });
+      const regressionConfig = loadRegressionConfig(profileEnvironment, {
+        maxTests: commandOptions.maxTests,
+      });
+      const clock = new SystemClock();
+      const runIds = new TimestampRunIdGenerator();
+      const exploration = new ExploreApplication(
+        new PlaywrightExplorationBrowser(),
+        new FileArtifactStore(explorationConfig.artifactsDirectory),
+        runIds,
+        clock,
+      );
+      const planningArtifacts = new FilePlanningArtifacts(
+        planningConfig.apiKey === null ? [] : [planningConfig.apiKey],
+      );
+      const planner = new PlanQa(
+        new OpenAICompatibleReasoningProvider(planningConfig),
+        planningArtifacts,
+        planningArtifacts,
+        clock,
+      );
+      const executionArtifacts = new FileExecutionArtifacts();
+      const runner = new RunQaPlan(
+        executionArtifacts,
+        executionArtifacts,
+        new PlaywrightScenarioExecutionBrowser(),
+        runIds,
+        clock,
+      );
+      const verificationArtifacts = new FileVerificationArtifacts();
+      const reproducer = new ConstrainedScenarioReproducer(
+        executionArtifacts,
+        new PlaywrightScenarioExecutionBrowser(),
+        runIds,
+        clock,
+      );
+      const verifier = new VerifyExecution(
+        verificationArtifacts,
+        verificationArtifacts,
+        reproducer,
+        runIds,
+        clock,
+      );
+      const regressionArtifacts = new FileRegressionArtifacts();
+      const generator = new GenerateRegressions(
+        regressionArtifacts,
+        regressionArtifacts,
+        new PrettierRegressionFormatter(),
+        new TypeScriptRegressionValidator(),
+        runIds,
+        clock,
+      );
+      const pipelineArtifacts = new FilePipelineArtifacts();
+      const useCase = new RunPipeline(
+        exploration,
+        planner,
+        runner,
+        verifier,
+        generator,
+        new PipelineHtmlRenderer(),
+        pipelineArtifacts,
+        clock,
+      );
+      const outcome = await useCase.execute(url, {
+        profile: commandOptions.profile,
+        provider: planningConfig.provider,
+        model: planningConfig.model,
+        exploration: {
+          headless: explorationConfig.headless,
+          interactive: true,
+          navigationTimeoutMs: explorationConfig.navigationTimeoutMs,
+          viewport: explorationConfig.viewport,
+          maxPages: explorationConfig.maxPages,
+          maxDepth: explorationConfig.maxDepth,
+          maxQueryVariantsPerPath: explorationConfig.maxQueryVariantsPerPath,
+          maxStates: explorationConfig.maxStates,
+          maxActionsPerState: explorationConfig.maxActionsPerState,
+          maxStateDepth: explorationConfig.maxStateDepth,
+        },
+        planning: { provider: planningConfig.provider, model: planningConfig.model },
+        execution: {
+          headless: executionConfig.headless,
+          viewport: executionConfig.viewport,
+          navigationTimeoutMs: executionConfig.navigationTimeoutMs,
+          maxScenarios: executionConfig.maxScenarios,
+          maxStepsPerScenario: executionConfig.maxStepsPerScenario,
+          executionTimeoutMs: executionConfig.executionTimeoutMs,
+          stepTimeoutMs: executionConfig.stepTimeoutMs,
+        },
+        verification: {
+          attempts: verificationConfig.attempts,
+          maxFindings: verificationConfig.maxFindings,
+          verifyTimeoutMs: verificationConfig.verifyTimeoutMs,
+          headless: verificationConfig.headless,
+          viewport: verificationConfig.viewport,
+          navigationTimeoutMs: verificationConfig.navigationTimeoutMs,
+          maxStepsPerScenario: verificationConfig.maxStepsPerScenario,
+          executionTimeoutMs: verificationConfig.executionTimeoutMs,
+          stepTimeoutMs: verificationConfig.stepTimeoutMs,
+        },
+        generation: {
+          includeFlaky: false,
+          maxGeneratedTests: regressionConfig.maxGeneratedTests,
+          maxStepsPerTest: regressionConfig.maxStepsPerTest,
+          maxAssertionsPerTest: regressionConfig.maxAssertionsPerTest,
+        },
+      });
+      reporter.pipeline(outcome, commandOptions.json === true);
+      process.exitCode = outcome.exitCode;
+    } catch (error) {
+      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      process.exitCode = 2;
+    }
+  });
+
+program
+  .command('report')
+  .description('Deterministically rerender report.html from pipeline JSON artifacts.')
+  .argument('<pipeline-json-or-source-run>', 'pipeline.json or its source run directory')
+  .action(async (path: string) => {
+    try {
+      const artifacts = new FilePipelineArtifacts();
+      const useCase = new RenderPipelineReport(artifacts, new PipelineHtmlRenderer(), artifacts);
+      reporter.report(await useCase.execute(path));
     } catch (error) {
       reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
       process.exitCode = 2;

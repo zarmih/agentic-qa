@@ -4,6 +4,7 @@ import { ConfigurationError } from '../../src/application/errors.js';
 import {
   loadConfig,
   loadExecutionConfig,
+  loadExportConfig,
   loadPlanningConfig,
   loadRegressionConfig,
   loadVerificationConfig,
@@ -97,6 +98,24 @@ describe('loadConfig', () => {
     ['AGENTIC_QA_MAX_STATE_DEPTH', '6'],
   ])('rejects invalid %s', (key, value) => {
     expect(() => loadConfig({ [key]: value }, '/workspace')).toThrow(ConfigurationError);
+  });
+});
+
+describe('loadExportConfig', () => {
+  it('uses a bounded validation timeout with CLI precedence', () => {
+    expect(loadExportConfig({})).toEqual({ validationTimeoutMs: 30_000 });
+    expect(
+      loadExportConfig(
+        { AGENTIC_QA_EXPORT_VALIDATION_TIMEOUT_MS: '20000' },
+        { validationTimeout: '15000' },
+      ),
+    ).toEqual({ validationTimeoutMs: 15_000 });
+  });
+
+  it.each(['999', '300001', 'not-a-number'])('rejects invalid export timeout %s', (value) => {
+    expect(() => loadExportConfig({ AGENTIC_QA_EXPORT_VALIDATION_TIMEOUT_MS: value })).toThrow(
+      ConfigurationError,
+    );
   });
 });
 

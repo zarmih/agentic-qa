@@ -21,6 +21,7 @@ const DEFAULT_VERIFY_TIMEOUT_MS = 900_000;
 const DEFAULT_MAX_GENERATED_TESTS = 20;
 const DEFAULT_MAX_GENERATED_STEPS = 12;
 const DEFAULT_MAX_GENERATED_ASSERTIONS = 5;
+const DEFAULT_EXPORT_VALIDATION_TIMEOUT_MS = 30_000;
 
 export interface AppConfig {
   readonly navigationTimeoutMs: number;
@@ -98,6 +99,14 @@ export interface RegressionConfig {
 
 export interface RegressionConfigOverrides {
   readonly maxTests?: string | undefined;
+}
+
+export interface ExportConfig {
+  readonly validationTimeoutMs: number;
+}
+
+export interface ExportConfigOverrides {
+  readonly validationTimeout?: string | undefined;
 }
 
 function positiveInteger(name: string, raw: string | undefined, fallback: number): number {
@@ -377,6 +386,21 @@ export function loadRegressionConfig(
       DEFAULT_MAX_GENERATED_ASSERTIONS,
       1,
       10,
+    ),
+  };
+}
+
+export function loadExportConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+  overrides: ExportConfigOverrides = {},
+): ExportConfig {
+  return {
+    validationTimeoutMs: integerInRange(
+      'Export validation timeout',
+      overrides.validationTimeout ?? environment.AGENTIC_QA_EXPORT_VALIDATION_TIMEOUT_MS,
+      DEFAULT_EXPORT_VALIDATION_TIMEOUT_MS,
+      1_000,
+      300_000,
     ),
   };
 }

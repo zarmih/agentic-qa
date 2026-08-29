@@ -28,6 +28,10 @@ import { RegressionSourceValidator } from './regression-source-validator.js';
 import { FindingsIntegrityService } from './verification-integrity.js';
 import { RegressionUrlPolicy } from './regression-url-policy.js';
 import { sha256Digest } from './source-integrity.js';
+import {
+  RegressionManifestIntegrityService,
+  type UnsignedRegressionManifest,
+} from './regression-integrity.js';
 
 const VERDICT_RANK = {
   CONFIRMED_DEFECT: 0,
@@ -99,6 +103,7 @@ export class GenerateRegressions {
   private readonly renderer = new RegressionTypeScriptRenderer();
   private readonly readme = new RegressionReadmeRenderer();
   private readonly findingsIntegrity = new FindingsIntegrityService();
+  private readonly manifestIntegrity = new RegressionManifestIntegrityService();
 
   public constructor(
     private readonly reader: RegressionArtifactReader,
@@ -201,8 +206,8 @@ export class GenerateRegressions {
     }
     const count = (status: RegressionGenerationStatus) =>
       entries.filter((item) => item.status === status).length;
-    const manifest: RegressionManifest = {
-      schemaVersion: '1.0',
+    const unsignedManifest: UnsignedRegressionManifest = {
+      schemaVersion: '1.1',
       generationId,
       sourceRunId: loaded.findings.sourceRunId,
       verificationId: loaded.findings.verificationId,
@@ -245,6 +250,10 @@ export class GenerateRegressions {
         graphDigest: loaded.findings.sourceIntegrity.graphDigest,
         stateGraphDigest: loaded.findings.sourceIntegrity.stateGraphDigest,
       },
+    };
+    const manifest: RegressionManifest = {
+      ...unsignedManifest,
+      generationIntegrity: this.manifestIntegrity.create(unsignedManifest),
     };
     const locations = await this.writer.prepareGeneration(loaded.runDirectory, generationId);
     await this.writer.saveGeneration(locations, manifest, this.readme.render(manifest), rendered);

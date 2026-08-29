@@ -18,7 +18,14 @@ export type ErrorCode =
   | 'VERIFICATION_INTEGRITY_INVALID'
   | 'REGRESSION_SOURCE_INVALID'
   | 'REGRESSION_INTEGRITY_INVALID'
-  | 'REGRESSION_GENERATION_FAILED';
+  | 'REGRESSION_GENERATION_FAILED'
+  | 'EXPORT_SOURCE_INVALID'
+  | 'EXPORT_TARGET_UNSAFE'
+  | 'EXPORT_CONFLICT'
+  | 'EXPORT_WRITE_FAILED'
+  | 'EXPORT_VALIDATION_FAILED'
+  | 'PIPELINE_FAILED'
+  | 'REPORT_SOURCE_INVALID';
 
 export class AgenticQaError extends Error {
   public constructor(
@@ -176,5 +183,47 @@ export class RegressionIntegrityError extends AgenticQaError {
 export class RegressionGenerationError extends AgenticQaError {
   public constructor(message: string, options?: ErrorOptions) {
     super('REGRESSION_GENERATION_FAILED', message, options);
+  }
+}
+
+export class ExportSourceError extends AgenticQaError {
+  public constructor(message: string) {
+    super('EXPORT_SOURCE_INVALID', message);
+  }
+}
+
+export class ExportTargetSafetyError extends AgenticQaError {
+  public constructor(message: string) {
+    super('EXPORT_TARGET_UNSAFE', message);
+  }
+}
+
+export class ExportConflictError extends AgenticQaError {
+  public constructor(message: string) {
+    super('EXPORT_CONFLICT', message);
+  }
+}
+
+export class ExportWriteError extends AgenticQaError {
+  public constructor(message: string, options?: ErrorOptions) {
+    super('EXPORT_WRITE_FAILED', message, options);
+  }
+}
+
+export class ExportValidationError extends AgenticQaError {
+  public constructor(message: string, options?: ErrorOptions) {
+    super('EXPORT_VALIDATION_FAILED', message, options);
+  }
+}
+
+export class PipelineError extends AgenticQaError {
+  public constructor(message: string, options?: ErrorOptions) {
+    super('PIPELINE_FAILED', message, options);
+  }
+}
+
+export class ReportSourceError extends AgenticQaError {
+  public constructor(message: string) {
+    super('REPORT_SOURCE_INVALID', message);
   }
 }
