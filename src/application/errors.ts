@@ -15,7 +15,10 @@ export type ErrorCode =
   | 'EXECUTION_INTEGRITY_INVALID'
   | 'EXECUTION_PLAN_INVALID'
   | 'VERIFICATION_SOURCE_INVALID'
-  | 'VERIFICATION_INTEGRITY_INVALID';
+  | 'VERIFICATION_INTEGRITY_INVALID'
+  | 'REGRESSION_SOURCE_INVALID'
+  | 'REGRESSION_INTEGRITY_INVALID'
+  | 'REGRESSION_GENERATION_FAILED';
 
 export class AgenticQaError extends Error {
   public constructor(
@@ -155,5 +158,23 @@ export class VerificationSourceError extends AgenticQaError {
 export class VerificationIntegrityError extends AgenticQaError {
   public constructor(message: string) {
     super('VERIFICATION_INTEGRITY_INVALID', message);
+  }
+}
+
+export class RegressionSourceError extends AgenticQaError {
+  public constructor(message: string) {
+    super('REGRESSION_SOURCE_INVALID', message);
+  }
+}
+
+export class RegressionIntegrityError extends AgenticQaError {
+  public constructor(message: string) {
+    super('REGRESSION_INTEGRITY_INVALID', message);
+  }
+}
+
+export class RegressionGenerationError extends AgenticQaError {
+  public constructor(message: string, options?: ErrorOptions) {
+    super('REGRESSION_GENERATION_FAILED', message, options);
   }
 }

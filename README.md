@@ -6,9 +6,10 @@ tests, identify likely defects, and produce reproducible reports and regression 
 
 ## Current status
 
-Stage 6 provides single-page inspection, deterministic multi-page exploration, an explicitly
+Stage 7 provides single-page inspection, deterministic multi-page exploration, an explicitly
 enabled conservative UI-state explorer, provider-neutral QA planning, constrained execution of
-validated plans, and deterministic defect verification:
+validated plans, deterministic defect verification, and reviewable Playwright regression
+generation:
 
 ```sh
 agentic-qa inspect https://example.com
@@ -17,6 +18,7 @@ agentic-qa explore https://example.com --interactive
 agentic-qa plan artifacts/<run-id>/exploration.json --provider openai-compatible --model <model>
 agentic-qa run artifacts/<run-id>/planning/qa-plan.json
 agentic-qa verify artifacts/<run-id>/executions/<execution-id>/execution.json --attempts 3
+agentic-qa generate artifacts/<run-id>/verifications/<verification-id>/findings.json
 ```
 
 `inspect` captures metadata and a screenshot for one page. Plain `explore` preserves the Stage 2
@@ -30,14 +32,17 @@ before saving it. `run` uses no LLM or provider connection: it executes only val
 `verify` is also LLM-free. It selects structural failures and significant reproduced error
 evidence, repeats only the relevant grounded scenarios in isolated browser contexts, and produces
 conservative reproducibility verdicts and defect findings.
+`generate` is LLM-free and does not launch the target application. It revalidates the entire
+source chain, compiles only graph-backed `NAVIGATE`/`CLICK` paths into a typed regression IR, and
+renders isolated Playwright specs for human review.
 
 HTTP 4xx/5xx responses are saved as valid inspection results with a warning. Invalid input,
 network failures, timeouts, browser startup failures, and artifact write failures return a
 human-readable CLI error and a non-zero exit code.
 
-Agentic QA does **not** yet generate Playwright source code, fill forms, handle authentication
-workflows, infer root causes, generate regression files, create issues, analyze screenshots, or
-provide an HTML dashboard. The LLM is a planner only and cannot access Playwright, browser
+Agentic QA does **not** yet fill forms, handle authentication workflows, infer root causes,
+automatically copy/commit/push generated tests, create issues or pull requests, analyze
+screenshots, or provide an HTML dashboard. The LLM is a planner only and cannot access Playwright, browser
 sessions, the shell, the filesystem, or arbitrary tools. Execution and verification remain
 deterministic and LLM-free.
 
@@ -64,37 +69,41 @@ npm run explore -- https://example.com --interactive --max-states 12
 npm run plan -- artifacts/<run-id>/exploration.json --model <model>
 npm run run -- artifacts/<run-id>/planning/qa-plan.json
 npm run verify -- artifacts/<run-id>/executions/<execution-id>/execution.json
+npm run generate -- artifacts/<run-id>/verifications/<verification-id>/findings.json
 ```
 
 Artifacts are stored in `artifacts/<run-id>/` by default and are intentionally ignored by Git.
 
 ## Configuration
 
-| Environment variable                     |     Default | Purpose                                          |
-| ---------------------------------------- | ----------: | ------------------------------------------------ |
-| `AGENTIC_QA_NAVIGATION_TIMEOUT_MS`       |     `30000` | Per-page navigation timeout                      |
-| `AGENTIC_QA_HEADLESS`                    |      `true` | Run Chromium without a visible window            |
-| `AGENTIC_QA_VIEWPORT_WIDTH`              |      `1440` | Browser viewport width                           |
-| `AGENTIC_QA_VIEWPORT_HEIGHT`             |       `900` | Browser viewport height                          |
-| `AGENTIC_QA_ARTIFACTS_DIR`               | `artifacts` | Artifact root, relative to the working directory |
-| `AGENTIC_QA_MAX_PAGES`                   |        `25` | Maximum exploration navigation attempts          |
-| `AGENTIC_QA_MAX_DEPTH`                   |         `3` | Maximum BFS depth; start page is depth 0         |
-| `AGENTIC_QA_MAX_QUERY_VARIANTS_PER_PATH` |         `5` | Query variants allowed per origin and path       |
-| `AGENTIC_QA_MAX_STATES`                  |        `12` | Unique UI states across an interactive run       |
-| `AGENTIC_QA_MAX_ACTIONS_PER_STATE`       |         `4` | Safe actions attempted from one state            |
-| `AGENTIC_QA_MAX_STATE_DEPTH`             |         `2` | Maximum replay action-path depth                 |
-| `AGENTIC_QA_LLM_BASE_URL`                |  _required_ | OpenAI-compatible API base URL                   |
-| `AGENTIC_QA_LLM_API_KEY`                 |       empty | Optional bearer key, read only from environment  |
-| `AGENTIC_QA_LLM_MODEL`                   |  _required_ | Model name when `--model` is not supplied        |
-| `AGENTIC_QA_LLM_TIMEOUT_MS`              |     `30000` | Bounded planning request timeout                 |
-| `AGENTIC_QA_MAX_EXECUTION_SCENARIOS`     |        `20` | AUTOMATABLE scenarios selected by priority       |
-| `AGENTIC_QA_MAX_STEPS_PER_SCENARIO`      |        `10` | Hard step cap for one execution scenario         |
-| `AGENTIC_QA_EXECUTION_TIMEOUT_MS`        |    `300000` | Bounded duration of an execution run             |
-| `AGENTIC_QA_STEP_TIMEOUT_MS`             |      `5000` | Bounded browser action timeout                   |
-| `AGENTIC_QA_VERIFY_ATTEMPTS`             |         `3` | Isolated attempts per rerunnable candidate       |
-| `AGENTIC_QA_MAX_VERIFY_FINDINGS`         |        `10` | Maximum candidates selected for verification     |
-| `AGENTIC_QA_VERIFY_TIMEOUT_MS`           |    `900000` | Global bounded verification duration             |
-| `AGENTIC_QA_DEBUG`                       |     `false` | Print diagnostic stack traces for CLI failures   |
+| Environment variable                           |     Default | Purpose                                          |
+| ---------------------------------------------- | ----------: | ------------------------------------------------ |
+| `AGENTIC_QA_NAVIGATION_TIMEOUT_MS`             |     `30000` | Per-page navigation timeout                      |
+| `AGENTIC_QA_HEADLESS`                          |      `true` | Run Chromium without a visible window            |
+| `AGENTIC_QA_VIEWPORT_WIDTH`                    |      `1440` | Browser viewport width                           |
+| `AGENTIC_QA_VIEWPORT_HEIGHT`                   |       `900` | Browser viewport height                          |
+| `AGENTIC_QA_ARTIFACTS_DIR`                     | `artifacts` | Artifact root, relative to the working directory |
+| `AGENTIC_QA_MAX_PAGES`                         |        `25` | Maximum exploration navigation attempts          |
+| `AGENTIC_QA_MAX_DEPTH`                         |         `3` | Maximum BFS depth; start page is depth 0         |
+| `AGENTIC_QA_MAX_QUERY_VARIANTS_PER_PATH`       |         `5` | Query variants allowed per origin and path       |
+| `AGENTIC_QA_MAX_STATES`                        |        `12` | Unique UI states across an interactive run       |
+| `AGENTIC_QA_MAX_ACTIONS_PER_STATE`             |         `4` | Safe actions attempted from one state            |
+| `AGENTIC_QA_MAX_STATE_DEPTH`                   |         `2` | Maximum replay action-path depth                 |
+| `AGENTIC_QA_LLM_BASE_URL`                      |  _required_ | OpenAI-compatible API base URL                   |
+| `AGENTIC_QA_LLM_API_KEY`                       |       empty | Optional bearer key, read only from environment  |
+| `AGENTIC_QA_LLM_MODEL`                         |  _required_ | Model name when `--model` is not supplied        |
+| `AGENTIC_QA_LLM_TIMEOUT_MS`                    |     `30000` | Bounded planning request timeout                 |
+| `AGENTIC_QA_MAX_EXECUTION_SCENARIOS`           |        `20` | AUTOMATABLE scenarios selected by priority       |
+| `AGENTIC_QA_MAX_STEPS_PER_SCENARIO`            |        `10` | Hard step cap for one execution scenario         |
+| `AGENTIC_QA_EXECUTION_TIMEOUT_MS`              |    `300000` | Bounded duration of an execution run             |
+| `AGENTIC_QA_STEP_TIMEOUT_MS`                   |      `5000` | Bounded browser action timeout                   |
+| `AGENTIC_QA_VERIFY_ATTEMPTS`                   |         `3` | Isolated attempts per rerunnable candidate       |
+| `AGENTIC_QA_MAX_VERIFY_FINDINGS`               |        `10` | Maximum candidates selected for verification     |
+| `AGENTIC_QA_VERIFY_TIMEOUT_MS`                 |    `900000` | Global bounded verification duration             |
+| `AGENTIC_QA_MAX_GENERATED_TESTS`               |        `20` | Maximum generated regression specs               |
+| `AGENTIC_QA_MAX_GENERATED_STEPS_PER_TEST`      |        `12` | Hard graph-action cap per generated spec         |
+| `AGENTIC_QA_MAX_GENERATED_ASSERTIONS_PER_TEST` |         `5` | Hard assertion cap per generated spec            |
+| `AGENTIC_QA_DEBUG`                             |     `false` | Print diagnostic stack traces for CLI failures   |
 
 `inspect` and `explore` accept `--headed`, `--timeout <milliseconds>`, and
 `--artifacts-dir <path>`.
@@ -108,6 +117,9 @@ values override environment values. API keys intentionally have no CLI option.
 `<run>/planning/qa-plan.json` layout. There is no unsafe, force-manual, or safety-disable option.
 `verify` accepts `--attempts` (hard range 2–10), `--max-findings`, and `--headed`. It requires the
 standard `<run>/executions/<execution-id>/execution.json` layout so source linkage is unambiguous.
+`generate` accepts `--max-tests`, `--include-flaky`, and an optional HTTP(S) origin-only
+`--base-url`. Origin substitution preserves graph-owned paths and queries; unsupported protocols,
+credentials, paths, queries, and fragments in the override are rejected.
 
 ## Safe exploration behavior
 
@@ -434,25 +446,94 @@ artifacts/<run-id>/
                     └── screenshots/
 ```
 
-`verification.json` contains candidates, attempts, signature distributions, variance, timings,
+`verification.json` schema 1.1 contains candidates, attempts, signature distributions, variance, timings,
 warnings, findings, and source digests. `findings.json` is the standalone defect-finding source of
-truth; `verification.md` is rendered locally without an LLM. Exit code `0` means no
+truth. Both Stage 6 result artifacts now carry canonical payload integrity and a verification-to-
+findings digest binding; legacy schema 1.0 artifacts must be regenerated with `verify` before
+Stage 7 will accept them. `verification.md` is rendered locally without an LLM. Exit code `0` means no
 confirmed/probable/flaky finding, `1` means at least one such finding exists, and `2` means a
 verification/configuration/infrastructure failure or global verification timeout occurred.
 
+## Generating regression tests
+
+Generate reviewable Playwright specs from a completed verification:
+
+```sh
+agentic-qa generate \
+  artifacts/<run-id>/verifications/<verification-id>/findings.json
+```
+
+Generation is a deterministic, provider-free pipeline:
+
+```text
+findings.json (untrusted)
+  → schema, payload, verdict, and full source-linkage validation
+  → confirmed-finding eligibility policy
+  → Stage 5 graph-backed scenario compiler
+  → typed regression IR
+  → unique semantic locator + state assertion compiler
+  → escaped TypeScript renderer
+  → TypeScript/@playwright-test validation
+  → reviewable artifacts
+```
+
+Only `CONFIRMED_DEFECT` findings with a safe positive assertion generate active tests.
+`PROBABLE_DEFECT` is recorded as `REVIEW_ONLY`; `FLAKY_DEFECT` is omitted by default and becomes a
+disabled `test.fixme` spec only with `--include-flaky`. `NOT_REPRODUCED`, `INCONCLUSIVE`, and
+`NON_DEFECT_SIGNAL` never become executable regressions. Console/page-error/failed-request-only
+findings are review-only unless a future stage defines an equally strong positive contract.
+
+Generated actions are limited to source-graph `NAVIGATE` and observed SAFE `CLICK` edges. The
+compiler reuses Stage 5 sequence and replay validation, re-applies action-risk/form/scope policy,
+and requires a unique semantic locator. Supported locator output is `getByTestId`, `getByRole`,
+`getByLabel`, stable ID, or exact `getByText`; indexed matches, XPath, broad CSS, selectors supplied
+by findings, and arbitrary URLs are rejected. Form interaction, credentials, authentication,
+uploads, keyboard input, and JavaScript evaluation remain unsupported.
+
+UI assertions describe the expected healthy graph state—not the presence of the defect. The
+compiler selects one minimal positive discriminator: a newly visible dialog/heading, selected tab,
+expanded disclosure, or expected canonical URL. A step-attributed, same-origin, consistently
+verified document/XHR/fetch HTTP 5xx may produce a technical `status < 500` assertion. It does not
+generate active tests for third-party, asset, or console-only noise.
+
+All application text is rendered only through escaped JavaScript string literals. Quotes,
+backticks, interpolation syntax, line breaks, control characters, and Unicode separators cannot
+become source code. Generated specs import only `@playwright/test` and never import Agentic QA
+internals. Each file is syntax/type checked during generation and receives a SHA-256 byte digest in
+the manifest. The command writes files only—it never visits the target, modifies another project,
+commits, pushes, or opens a pull request.
+
+```text
+artifacts/<run-id>/
+└── regressions/
+    └── <generation-id>/
+        ├── manifest.json
+        ├── README.md
+        └── tests/
+            ├── DEF-760D270E.spec.ts
+            └── DEF-705553CE.spec.ts
+```
+
+`manifest.json` records generated, fixme, review-only, unsupported, over-limit, and duplicate
+outcomes, source-chain digests, spec digests, assertions, and limits. Generation exit code `0`
+means generation completed without eligible review/unsupported items, `1` means artifacts were
+created but a probable or supported-verdict candidate still requires review, and `2` means source,
+integrity, configuration, or generation validation failed. As elsewhere in the project, SHA-256
+detects content changes; it is not author authentication or a digital signature.
+
 ## Architecture
 
-- `domain` — dependency-free page/state graphs, planning/execution/verification models,
-  fingerprints, signatures, action classification, URL scope, and safety rules.
+- `domain` — dependency-free page/state graphs, planning/execution/verification models, typed
+  regression IR, fingerprints, signatures, action classification, URL scope, and safety rules.
 - `application` — inspect, page/state BFS, planning, integrity and grounding validation,
   deterministic execution compilation, constrained reproduction orchestration, signature/verdict
-  policy, evidence matching, and external ports.
+  policy, evidence matching, regression eligibility/compilation, and external ports.
 - `browser` — Playwright adapters, semantic candidate capture, constrained graph action execution,
   runtime drift checks, evidence, isolation, popup/dialog/download handling, and trace cleanup.
 - `infrastructure` — centralized configuration, filesystem artifacts, run IDs, secret redaction,
-  and the OpenAI-compatible HTTP adapter.
-- `reporting` — concise terminal output and deterministic Markdown rendering, separate from plan
-  generation.
+  generated TypeScript validation, and the OpenAI-compatible HTTP adapter.
+- `reporting` — concise terminal output plus deterministic Markdown and TypeScript rendering,
+  separate from plan generation.
 - `cli` — command parsing and composition root.
 
 The domain and application layers import neither Playwright nor an LLM SDK. Additional model
@@ -471,12 +552,13 @@ npm test
 
 Integration tests host controlled local applications and a fake OpenAI-compatible provider. They
 exercise all CLI modes, including a real Chromium
-exploration-to-planning-to-execution-to-verification pipeline, without public internet or API
-credentials.
+exploration-to-planning-to-execution-to-verification-to-generation pipeline. Generated UI,
+navigation, and HTTP specs are compiled and run against controlled bug/healthy modes with real
+Chromium, without public internet or API credentials.
 
 ## Roadmap
 
-1. Stage 7 graph-backed Playwright regression test generation from confirmed findings.
+1. Stage 8 human-approved regression export and target-project integration preview.
 2. Defect triage/export integrations with explicit human approval boundaries.
 3. Visual analysis and HTML reporting as separate, evidence-preserving capabilities.
 

@@ -5,6 +5,7 @@ import {
   loadConfig,
   loadExecutionConfig,
   loadPlanningConfig,
+  loadRegressionConfig,
   loadVerificationConfig,
 } from '../../src/infrastructure/config.js';
 
@@ -230,5 +231,27 @@ describe('loadVerificationConfig', () => {
     ['AGENTIC_QA_VERIFY_TIMEOUT_MS', '999'],
   ])('rejects invalid verification setting %s', (key, value) => {
     expect(() => loadVerificationConfig({ [key]: value })).toThrow(ConfigurationError);
+  });
+});
+
+describe('loadRegressionConfig', () => {
+  it('uses conservative hard defaults and CLI precedence', () => {
+    expect(loadRegressionConfig({})).toEqual({
+      maxGeneratedTests: 20,
+      maxStepsPerTest: 12,
+      maxAssertionsPerTest: 5,
+    });
+    expect(
+      loadRegressionConfig({ AGENTIC_QA_MAX_GENERATED_TESTS: '7' }, { maxTests: '4' }),
+    ).toMatchObject({ maxGeneratedTests: 4 });
+  });
+
+  it.each([
+    ['AGENTIC_QA_MAX_GENERATED_TESTS', '0'],
+    ['AGENTIC_QA_MAX_GENERATED_TESTS', '101'],
+    ['AGENTIC_QA_MAX_GENERATED_STEPS_PER_TEST', '26'],
+    ['AGENTIC_QA_MAX_GENERATED_ASSERTIONS_PER_TEST', '11'],
+  ])('rejects invalid generation setting %s', (key, value) => {
+    expect(() => loadRegressionConfig({ [key]: value })).toThrow(ConfigurationError);
   });
 });

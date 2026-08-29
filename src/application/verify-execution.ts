@@ -32,6 +32,12 @@ import type {
 import { VerificationSourceValidator } from './verification-source-validator.js';
 import { DefectSignatureService } from './verification-signature.js';
 import { DefectFindingFactory, ReproducibilityClassifier } from './verification-verdict.js';
+import {
+  FindingsIntegrityService,
+  VerificationIntegrityService,
+  type UnsignedFindingsArtifact,
+  type UnsignedVerificationRun,
+} from './verification-integrity.js';
 
 export interface VerifyExecutionOptions extends VerificationLimits {
   readonly headless: boolean;
@@ -70,7 +76,7 @@ function uniqueSignatures(values: readonly DefectSignature[]): readonly DefectSi
   );
 }
 
-function summaryFor(
+export function verificationSummaryFor(
   discovered: number,
   selected: readonly VerificationCandidate[],
   attempts: Readonly<Record<string, readonly VerificationAttempt[]>>,
@@ -115,6 +121,8 @@ export class VerifyExecution {
   private readonly classifier = new ReproducibilityClassifier();
   private readonly findingsFactory = new DefectFindingFactory();
   private readonly markdown = new VerificationMarkdownRenderer();
+  private readonly verificationIntegrity = new VerificationIntegrityService();
+  private readonly findingsIntegrity = new FindingsIntegrityService();
 
   public constructor(
     private readonly reader: VerificationArtifactReader,
@@ -194,7 +202,7 @@ export class VerifyExecution {
       ...(discovered.length > selected.length ? ['max_findings'] : []),
       ...(globalTimeoutReached ? ['verification_timeout'] : []),
     ];
-    const summary = summaryFor(
+    const summary = verificationSummaryFor(
       discovered.length,
       selected,
       attemptsByCandidate,
@@ -203,8 +211,8 @@ export class VerifyExecution {
       limitReached,
     );
     const completedAt = this.clock.now();
-    const result: VerificationRun = {
-      schemaVersion: '1.0',
+    const unsignedResult: UnsignedVerificationRun = {
+      schemaVersion: '1.1',
       verificationId,
       sourceRunId: loaded.execution.sourceRunId,
       sourceExecutionId: loaded.execution.executionId,
@@ -253,14 +261,26 @@ export class VerifyExecution {
         attemptsDirectory: 'attempts',
       },
     };
-    const findingsArtifact: FindingsArtifact = {
-      schemaVersion: '1.0',
+    const result: VerificationRun = {
+      ...unsignedResult,
+      verificationIntegrity: this.verificationIntegrity.create(unsignedResult),
+    };
+    const unsignedFindings: UnsignedFindingsArtifact = {
+      schemaVersion: '1.1',
       verificationId,
       sourceRunId: result.sourceRunId,
       sourceExecutionId: result.sourceExecutionId,
       attemptPolicy: result.attemptPolicy,
       summary,
       findings,
+      sourceIntegrity: {
+        ...result.sourceIntegrity,
+        verificationDigest: this.verificationIntegrity.digest(result),
+      },
+    };
+    const findingsArtifact: FindingsArtifact = {
+      ...unsignedFindings,
+      findingsIntegrity: this.findingsIntegrity.create(unsignedFindings),
     };
     await this.writer.saveVerification(
       locations.directory,

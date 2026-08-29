@@ -6,6 +6,7 @@ import { PlanQa } from '../application/plan-qa.js';
 import { RunQaPlan } from '../application/run-qa-plan.js';
 import { ConstrainedScenarioReproducer } from '../application/constrained-scenario-reproducer.js';
 import { VerifyExecution } from '../application/verify-execution.js';
+import { GenerateRegressions } from '../application/generate-regressions.js';
 import { PlaywrightExplorationBrowser } from '../browser/playwright-exploration-browser.js';
 import { PlaywrightPageInspector } from '../browser/playwright-page-inspector.js';
 import { PlaywrightScenarioExecutionBrowser } from '../browser/playwright-scenario-execution-browser.js';
@@ -13,15 +14,19 @@ import { FileArtifactStore } from '../infrastructure/file-artifact-store.js';
 import { FileExecutionArtifacts } from '../infrastructure/file-execution-artifacts.js';
 import { FilePlanningArtifacts } from '../infrastructure/file-planning-artifacts.js';
 import { FileVerificationArtifacts } from '../infrastructure/file-verification-artifacts.js';
+import { FileRegressionArtifacts } from '../infrastructure/file-regression-artifacts.js';
 import {
   loadConfig,
   loadExecutionConfig,
   loadPlanningConfig,
   loadVerificationConfig,
+  loadRegressionConfig,
 } from '../infrastructure/config.js';
 import { OpenAICompatibleReasoningProvider } from '../infrastructure/openai-compatible-reasoning-provider.js';
 import { SystemClock, TimestampRunIdGenerator } from '../infrastructure/run-id.js';
 import { ConsoleReporter } from '../reporting/console-reporter.js';
+import { TypeScriptRegressionValidator } from '../infrastructure/typescript-regression-validator.js';
+import { PrettierRegressionFormatter } from '../infrastructure/prettier-regression-formatter.js';
 
 interface InspectCommandOptions {
   readonly headed?: boolean;
@@ -59,15 +64,21 @@ interface VerifyCommandOptions {
   readonly headed?: boolean;
 }
 
+interface GenerateCommandOptions {
+  readonly includeFlaky?: boolean;
+  readonly maxTests?: string;
+  readonly baseUrl?: string;
+}
+
 const reporter = new ConsoleReporter();
 const program = new Command();
 
 program
   .name('agentic-qa')
   .description(
-    'Inspect and explore web applications, then plan, run, and verify constrained QA scenarios.',
+    'Inspect and explore web applications, then plan, run, verify, and generate constrained regressions.',
   )
-  .version('0.6.0')
+  .version('0.7.0')
   .showHelpAfterError();
 
 program
@@ -211,6 +222,40 @@ program
         stepTimeoutMs: config.stepTimeoutMs,
       });
       reporter.verification(outcome);
+      process.exitCode = outcome.exitCode;
+    } catch (error) {
+      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      process.exitCode = 2;
+    }
+  });
+
+program
+  .command('generate')
+  .description('Generate reviewable Playwright regressions from verified defect findings.')
+  .argument('<findings-json>', 'path to a Stage 6 findings.json artifact')
+  .option('--include-flaky', 'emit flaky findings as disabled test.fixme specs')
+  .option('--max-tests <count>', 'maximum generated Playwright spec files')
+  .option('--base-url <origin>', 'replace the source origin while preserving graph paths')
+  .action(async (path: string, commandOptions: GenerateCommandOptions) => {
+    try {
+      const config = loadRegressionConfig(process.env, { maxTests: commandOptions.maxTests });
+      const artifacts = new FileRegressionArtifacts();
+      const useCase = new GenerateRegressions(
+        artifacts,
+        artifacts,
+        new PrettierRegressionFormatter(),
+        new TypeScriptRegressionValidator(),
+        new TimestampRunIdGenerator(),
+        new SystemClock(),
+      );
+      const outcome = await useCase.execute(path, {
+        includeFlaky: commandOptions.includeFlaky === true,
+        ...(commandOptions.baseUrl === undefined ? {} : { baseUrl: commandOptions.baseUrl }),
+        maxGeneratedTests: config.maxGeneratedTests,
+        maxStepsPerTest: config.maxStepsPerTest,
+        maxAssertionsPerTest: config.maxAssertionsPerTest,
+      });
+      reporter.regressionGeneration(outcome);
       process.exitCode = outcome.exitCode;
     } catch (error) {
       reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');

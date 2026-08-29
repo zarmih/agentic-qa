@@ -76,11 +76,62 @@ export function verificationPlanProposal(observation: PlanningObservation): Prop
   if (danger === undefined) throw new Error('Verification destructive control was not observed.');
   const homePage = observation.pages.find((item) => new URL(item.url).pathname === '/verification');
   if (homePage === undefined) throw new Error('Verification home page was not observed.');
+  const navigationPage = observation.pages.find(
+    (item) => new URL(item.url).pathname === '/verification/navigation',
+  );
+  if (navigationPage === undefined)
+    throw new Error('Verification navigation page was not observed.');
   return {
     schemaVersion: '1.0',
     summary: 'Controlled defect reproducibility plan.',
     scenarios: [
       ...DEFINITIONS.map(scenario),
+      {
+        id: 'scenario-verify-navigation',
+        title: 'Verify observed navigation target',
+        objective: 'Verify the observed page still resolves to its graph-owned URL.',
+        priority: 'HIGH',
+        type: 'NAVIGATION',
+        preconditions: [],
+        steps: [
+          {
+            id: 'step-scenario-verify-navigation',
+            action: 'NAVIGATE',
+            target: { pageId: navigationPage.id },
+            instruction: 'Navigate to the observed page node.',
+            expected: 'The observed canonical URL is reached.',
+          },
+        ],
+        expectedOutcome: 'The graph-owned navigation target remains stable.',
+        sourcePageIds: [navigationPage.id],
+        sourceStateIds: [],
+        evidenceRefs: [],
+        rationale: 'The target was visited during controlled exploration.',
+        confidence: 0.99,
+      },
+      {
+        id: 'scenario-verify-navigation-duplicate',
+        title: 'Recheck the observed navigation destination',
+        objective: 'Independently cover the same graph-owned navigation destination.',
+        priority: 'MEDIUM',
+        type: 'REGRESSION_CANDIDATE',
+        preconditions: [],
+        steps: [
+          {
+            id: 'step-scenario-verify-navigation-duplicate',
+            action: 'NAVIGATE',
+            target: { pageId: navigationPage.id },
+            instruction: 'Replay the independently planned graph navigation.',
+            expected: 'The graph-owned destination remains reachable.',
+          },
+        ],
+        expectedOutcome: 'The independently planned navigation reaches the observed URL.',
+        sourcePageIds: [navigationPage.id],
+        sourceStateIds: [],
+        evidenceRefs: [],
+        rationale: 'Used to prove deterministic duplicate regression suppression.',
+        confidence: 0.98,
+      },
       {
         id: 'scenario-verify-destructive-manual',
         title: 'Manual destructive safety boundary',

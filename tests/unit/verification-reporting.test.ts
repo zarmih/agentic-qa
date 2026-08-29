@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { verificationExitCode } from '../../src/application/verify-execution.js';
 import type { VerificationRun, VerificationSummary } from '../../src/domain/verification.js';
 import { VerificationMarkdownRenderer } from '../../src/reporting/verification-markdown.js';
+import { VerificationIntegrityService } from '../../src/application/verification-integrity.js';
 
 function summary(overrides: Partial<VerificationSummary> = {}): VerificationSummary {
   return {
@@ -23,8 +24,8 @@ function summary(overrides: Partial<VerificationSummary> = {}): VerificationSumm
 }
 
 function verificationRun(): VerificationRun {
-  return {
-    schemaVersion: '1.0',
+  const unsigned: Omit<VerificationRun, 'verificationIntegrity'> = {
+    schemaVersion: '1.1',
     verificationId: 'verify-fixture',
     sourceRunId: 'run-fixture',
     sourceExecutionId: 'exec-fixture',
@@ -67,6 +68,10 @@ function verificationRun(): VerificationRun {
       findings: 'findings.json',
       attemptsDirectory: 'attempts',
     },
+  };
+  return {
+    ...unsigned,
+    verificationIntegrity: new VerificationIntegrityService().create(unsigned),
   };
 }
 

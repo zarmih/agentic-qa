@@ -18,6 +18,9 @@ const DEFAULT_STEP_TIMEOUT_MS = 5_000;
 const DEFAULT_VERIFY_ATTEMPTS = 3;
 const DEFAULT_MAX_VERIFY_FINDINGS = 10;
 const DEFAULT_VERIFY_TIMEOUT_MS = 900_000;
+const DEFAULT_MAX_GENERATED_TESTS = 20;
+const DEFAULT_MAX_GENERATED_STEPS = 12;
+const DEFAULT_MAX_GENERATED_ASSERTIONS = 5;
 
 export interface AppConfig {
   readonly navigationTimeoutMs: number;
@@ -85,6 +88,16 @@ export interface VerificationConfigOverrides extends ExecutionConfigOverrides {
   readonly attempts?: string | undefined;
   readonly maxFindings?: string | undefined;
   readonly verifyTimeout?: string | undefined;
+}
+
+export interface RegressionConfig {
+  readonly maxGeneratedTests: number;
+  readonly maxStepsPerTest: number;
+  readonly maxAssertionsPerTest: number;
+}
+
+export interface RegressionConfigOverrides {
+  readonly maxTests?: string | undefined;
 }
 
 function positiveInteger(name: string, raw: string | undefined, fallback: number): number {
@@ -335,6 +348,35 @@ export function loadVerificationConfig(
       DEFAULT_VERIFY_TIMEOUT_MS,
       1_000,
       3_600_000,
+    ),
+  };
+}
+
+export function loadRegressionConfig(
+  environment: NodeJS.ProcessEnv = process.env,
+  overrides: RegressionConfigOverrides = {},
+): RegressionConfig {
+  return {
+    maxGeneratedTests: integerInRange(
+      'Maximum generated tests',
+      overrides.maxTests ?? environment.AGENTIC_QA_MAX_GENERATED_TESTS,
+      DEFAULT_MAX_GENERATED_TESTS,
+      1,
+      100,
+    ),
+    maxStepsPerTest: integerInRange(
+      'Maximum generated steps per test',
+      environment.AGENTIC_QA_MAX_GENERATED_STEPS_PER_TEST,
+      DEFAULT_MAX_GENERATED_STEPS,
+      1,
+      25,
+    ),
+    maxAssertionsPerTest: integerInRange(
+      'Maximum generated assertions per test',
+      environment.AGENTIC_QA_MAX_GENERATED_ASSERTIONS_PER_TEST,
+      DEFAULT_MAX_GENERATED_ASSERTIONS,
+      1,
+      10,
     ),
   };
 }

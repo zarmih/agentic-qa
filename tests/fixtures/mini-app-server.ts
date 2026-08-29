@@ -10,9 +10,9 @@ export interface MiniAppServer {
   close(): Promise<void>;
 }
 
-export type VerificationFixtureMode = 'baseline' | 'source' | 'verify';
+export type VerificationFixtureMode = 'baseline' | 'source' | 'verify' | 'healthy';
 export type VerificationScenarioName =
-  'stable' | 'flaky' | 'fixed' | 'inconclusive' | 'varied' | 'http';
+  'stable' | 'flaky' | 'fixed' | 'inconclusive' | 'varied' | 'http' | 'navigation';
 
 export interface ExecutionFixtureBehavior {
   readonly regression: 'stable' | 'wrong-state';
@@ -273,6 +273,7 @@ const VERIFICATION_SCENARIOS: readonly VerificationScenarioName[] = [
   'inconclusive',
   'varied',
   'http',
+  'navigation',
 ];
 
 function initialVerificationAttempts(): Record<VerificationScenarioName, number> {
@@ -313,6 +314,7 @@ function verificationPage(name: VerificationScenarioName, mode: VerificationFixt
     inconclusive: 'Open inconclusive panel',
     varied: 'Open varied panel',
     http: 'Open cart',
+    navigation: 'Open navigation',
   };
   const safeLabel = labels[name];
   const runtimeLabel = mode === 'verify' && name === 'inconclusive' ? 'Delete account' : safeLabel;
@@ -356,6 +358,9 @@ function verificationOutcome(
   attempt: number,
 ): { readonly heading: string; readonly status: number } {
   const expected = `Expected ${name} state`;
+  if (mode === 'healthy') {
+    return { heading: expected, status: 200 };
+  }
   if (mode === 'baseline' || name === 'http') {
     return { heading: expected, status: name === 'http' ? 500 : 200 };
   }
@@ -379,6 +384,8 @@ function verificationOutcome(
         heading: attempt === 2 ? 'Wrong varied state B' : 'Wrong varied state',
         status: 200,
       };
+    case 'navigation':
+      return { heading: expected, status: 200 };
   }
 }
 
@@ -419,6 +426,17 @@ function respond(
       );
       response.writeHead(outcome.status, { 'content-type': 'application/json' });
       response.end(JSON.stringify(outcome));
+      return;
+    }
+    if (url.pathname === '/verification/navigation') {
+      if (verificationMode() !== 'baseline') verificationAttempts.navigation += 1;
+      if (verificationMode() === 'source' || verificationMode() === 'verify') {
+        response.writeHead(302, { location: '/verification/navigation-wrong' });
+        response.end();
+      } else {
+        response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        response.end(page('Expected navigation target', '<a href="/verification">Back</a>'));
+      }
       return;
     }
     if (url.pathname === '/__danger') {
@@ -498,6 +516,9 @@ function respond(
         break;
       case '/verification':
         html = verificationHomePage();
+        break;
+      case '/verification/navigation-wrong':
+        html = page('Wrong navigation target', '<a href="/verification">Back</a>');
         break;
       case '/popup':
         html = page('Same-origin popup', '<p>Popup content</p>');

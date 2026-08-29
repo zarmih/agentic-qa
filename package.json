@@ -1,6 +1,6 @@
 {
   "name": "agentic-qa",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "An open-source foundation for autonomous web application quality assurance.",
   "type": "module",
   "bin": {
@@ -23,7 +23,8 @@
     "explore": "tsx src/cli/index.ts explore",
     "plan": "tsx src/cli/index.ts plan",
     "run": "tsx src/cli/index.ts run",
-    "verify": "tsx src/cli/index.ts verify"
+    "verify": "tsx src/cli/index.ts verify",
+    "generate": "tsx src/cli/index.ts generate"
   },
   "keywords": [
     "qa",
@@ -42,18 +43,19 @@
   "homepage": "https://github.com/zarmih/agentic-qa#readme",
   "license": "MIT",
   "dependencies": {
+    "@types/node": "^24.13.3",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1",
     "playwright": "^1.62.1",
+    "prettier": "^3.9.0",
+    "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^24.13.3",
+    "@playwright/test": "^1.62.1",
     "eslint": "^10.9.1",
-    "prettier": "^3.9.0",
     "tsx": "^4.23.0",
-    "typescript": "^6.0.3",
     "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.11"
   }

@@ -185,8 +185,23 @@ export interface VerificationEnvironment {
   readonly headless: boolean;
 }
 
+export interface VerificationIntegrity {
+  readonly algorithm: 'SHA-256';
+  readonly payloadDigest: string;
+}
+
+export interface VerificationSourceIntegrity {
+  readonly algorithm: 'SHA-256';
+  readonly sourceExecutionDigest: string;
+  readonly planDigest: string;
+  readonly explorationDigest: string;
+  readonly observationDigest: string;
+  readonly graphDigest: string;
+  readonly stateGraphDigest: string;
+}
+
 export interface VerificationRun {
-  readonly schemaVersion: '1.0';
+  readonly schemaVersion: '1.1';
   readonly verificationId: string;
   readonly sourceRunId: string;
   readonly sourceExecutionId: string;
@@ -196,15 +211,7 @@ export interface VerificationRun {
   readonly durationMs: number;
   readonly attemptPolicy: VerificationAttemptPolicy;
   readonly environment: VerificationEnvironment;
-  readonly sourceIntegrity: {
-    readonly algorithm: 'SHA-256';
-    readonly sourceExecutionDigest: string;
-    readonly planDigest: string;
-    readonly explorationDigest: string;
-    readonly observationDigest: string;
-    readonly graphDigest: string;
-    readonly stateGraphDigest: string;
-  };
+  readonly sourceIntegrity: VerificationSourceIntegrity;
   readonly summary: VerificationSummary;
   readonly candidates: readonly VerificationCandidate[];
   readonly attempts: Readonly<Record<string, readonly VerificationAttempt[]>>;
@@ -217,16 +224,21 @@ export interface VerificationRun {
     readonly findings: 'findings.json';
     readonly attemptsDirectory: 'attempts';
   };
+  readonly verificationIntegrity: VerificationIntegrity;
 }
 
 export interface FindingsArtifact {
-  readonly schemaVersion: '1.0';
+  readonly schemaVersion: '1.1';
   readonly verificationId: string;
   readonly sourceRunId: string;
   readonly sourceExecutionId: string;
   readonly attemptPolicy: VerificationAttemptPolicy;
   readonly summary: VerificationSummary;
   readonly findings: readonly DefectFinding[];
+  readonly sourceIntegrity: VerificationSourceIntegrity & {
+    readonly verificationDigest: string;
+  };
+  readonly findingsIntegrity: VerificationIntegrity;
 }
 
 export interface VerificationLimits {

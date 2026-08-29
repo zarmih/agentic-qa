@@ -4,6 +4,7 @@ import type { ExplorationOutcome } from '../application/explore-application.js';
 import type { PlanQaOutcome } from '../application/plan-qa.js';
 import type { RunQaPlanOutcome } from '../application/run-qa-plan.js';
 import type { VerifyExecutionOutcome } from '../application/verify-execution.js';
+import type { GenerateRegressionsOutcome } from '../application/generate-regressions.js';
 
 export interface Output {
   log(message: string): void;
@@ -164,6 +165,31 @@ export class ConsoleReporter {
     }
     lines.push('', `${pc.dim('Artifacts')}        ${outcome.artifactDirectory}`);
     this.output.log(lines.join('\n'));
+  }
+
+  public regressionGeneration(outcome: GenerateRegressionsOutcome): void {
+    const { manifest } = outcome;
+    const files = manifest.tests.flatMap((entry) => (entry.file === null ? [] : [entry.file]));
+    this.output.log(
+      [
+        pc.bold(
+          outcome.exitCode === 0
+            ? pc.green('Agentic QA Regression Generation complete')
+            : pc.yellow('Agentic QA Regression Generation complete with review items'),
+        ),
+        '',
+        `${pc.dim('Verification')} ${manifest.verificationId}`,
+        `${pc.dim('Eligible')}     ${String(manifest.summary.eligible)}`,
+        `${pc.dim('Generated')}    ${String(manifest.summary.generated)}`,
+        `${pc.dim('Fixme')}        ${String(manifest.summary.generatedFixme)}`,
+        `${pc.dim('Review only')}  ${String(manifest.summary.reviewOnly)}`,
+        `${pc.dim('Unsupported')}  ${String(manifest.summary.unsupported)}`,
+        `${pc.dim('Duplicates')}   ${String(manifest.summary.duplicates)}`,
+        ...(files.length === 0 ? [] : ['', pc.bold('Tests:'), ...files]),
+        '',
+        `${pc.dim('Artifacts')}    ${outcome.artifactDirectory}`,
+      ].join('\n'),
+    );
   }
 
   public failure(error: unknown, debug: boolean): void {
