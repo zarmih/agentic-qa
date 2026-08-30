@@ -9,6 +9,8 @@ been published as part of this repository audit.
 - Added locale-independent canonical digest ordering.
 - Preserved machine-readable pipeline/report artifacts when Chromium cannot start.
 - Added structured JSON command failures and a three-OS Node 24 package/browser validation matrix.
+- Made generated TypeScript validation and artifact-path tests portable across Windows, macOS, and
+  Linux.
 - Added v1 contract, schema compatibility, performance, security, and release-gate documentation.
 
 ## 0.8.0

@@ -59,7 +59,7 @@ describe('FileVerificationArtifacts', () => {
     const artifacts = new FileVerificationArtifacts();
     await expect(artifacts.loadVerificationSource(persisted.executionFile)).resolves.toMatchObject({
       runDirectory: persisted.runDirectory,
-      sourceExecutionRelativePath: '../../executions/exec-verification-fixture',
+      sourceExecutionRelativePath: join('..', '..', 'executions', 'exec-verification-fixture'),
     });
     const copied = join(persisted.runDirectory, 'execution-copy.json');
     await writeFile(copied, await readFile(persisted.executionFile));

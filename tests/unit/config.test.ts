@@ -76,7 +76,7 @@ describe('loadConfig', () => {
     );
     expect(config.navigationTimeoutMs).toBe(9000);
     expect(config.headless).toBe(false);
-    expect(config.artifactsDirectory).toBe('/tmp/runs');
+    expect(config.artifactsDirectory).toBe(resolve('/tmp/runs'));
     expect(config.maxPages).toBe(12);
     expect(config.maxDepth).toBe(0);
     expect(config.maxQueryVariantsPerPath).toBe(3);
