@@ -4,14 +4,18 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { URL } from 'node:url';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, '..');
-const command = (name) => (process.platform === 'win32' ? `${name}.cmd` : name);
+const npmCli = process.env.npm_execpath;
+if (npmCli === undefined || npmCli === '') {
+  throw new Error('release package smoke must be launched through npm run.');
+}
+const npxCli = join(dirname(npmCli), 'npx-cli.js');
 
 async function execute(executable, args, options = {}) {
   return execFileAsync(executable, args, {
@@ -44,8 +48,8 @@ try {
   await Promise.all([mkdir(packDirectory), mkdir(installDirectory), mkdir(artifactsDirectory)]);
 
   const packed = await execute(
-    command('npm'),
-    ['pack', '--json', '--pack-destination', packDirectory],
+    process.execPath,
+    [npmCli, 'pack', '--json', '--pack-destination', packDirectory],
     { cwd: projectRoot },
   );
   const packJson = JSON.parse(packed.stdout);
@@ -61,17 +65,21 @@ try {
     `${JSON.stringify({ name: 'agentic-qa-clean-install-smoke', private: true })}\n`,
     'utf8',
   );
-  await execute(command('npm'), ['install', '--omit=dev', '--ignore-scripts', tarball], {
+  await execute(process.execPath, [npmCli, 'install', '--omit=dev', '--ignore-scripts', tarball], {
     cwd: installDirectory,
   });
 
-  const version = await execute(command('npx'), ['--no-install', 'agentic-qa', '--version'], {
-    cwd: installDirectory,
-  });
+  const version = await execute(
+    process.execPath,
+    [npxCli, '--no-install', 'agentic-qa', '--version'],
+    {
+      cwd: installDirectory,
+    },
+  );
   if (version.stdout.trim() !== '0.9.0') {
     throw new Error(`Installed CLI reported unexpected version: ${version.stdout.trim()}`);
   }
-  const help = await execute(command('npx'), ['--no-install', 'agentic-qa', '--help'], {
+  const help = await execute(process.execPath, [npxCli, '--no-install', 'agentic-qa', '--help'], {
     cwd: installDirectory,
   });
   if (!help.stdout.includes('inspect') || !help.stdout.includes('pipeline')) {
@@ -89,8 +97,9 @@ try {
   const exploreArtifacts = join(artifactsDirectory, 'explore');
   const interactiveArtifacts = join(artifactsDirectory, 'interactive');
   await execute(
-    command('npx'),
+    process.execPath,
     [
+      npxCli,
       '--no-install',
       'agentic-qa',
       'inspect',
@@ -103,8 +112,9 @@ try {
     { cwd: installDirectory },
   );
   await execute(
-    command('npx'),
+    process.execPath,
     [
+      npxCli,
       '--no-install',
       'agentic-qa',
       'explore',
@@ -121,8 +131,9 @@ try {
     { cwd: installDirectory },
   );
   await execute(
-    command('npx'),
+    process.execPath,
     [
+      npxCli,
       '--no-install',
       'agentic-qa',
       'explore',
