@@ -77,7 +77,7 @@ const currentPipelineSchema = z
   .object({
     schemaVersion: z.literal('1.1'),
     ...commonPipelineFields,
-    version: z.literal('0.9.0'),
+    version: z.enum(['0.9.0', '1.0.0']),
     artifacts: z.object({ ...artifactFields, exploration: safeArtifact.nullable() }).strict(),
   })
   .strict();

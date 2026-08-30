@@ -86,7 +86,7 @@ describe('pipeline product model', () => {
     const failed = {
       ...legacy,
       schemaVersion: '1.1',
-      version: '0.9.0',
+      version: '1.0.0',
       status: 'FAILED',
       stages: legacy.stages.map((stage, index) =>
         index === 0
@@ -121,7 +121,7 @@ describe('pipeline product model', () => {
     };
     expect(parseSavedPipeline(failed)).toMatchObject({
       schemaVersion: '1.1',
-      version: '0.9.0',
+      version: '1.0.0',
       status: 'FAILED',
       artifacts: { exploration: null },
     });

@@ -1,6 +1,6 @@
 {
   "name": "agentic-qa",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "description": "Safe browser QA exploration, planning, verification, regression generation, and human-approved export.",
   "type": "module",
   "bin": {

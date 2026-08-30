@@ -1,6 +1,6 @@
 # Artifact schema compatibility
 
-This document is the v1 release-candidate compatibility policy. JSON schemas are versioned
+This document is the v1 compatibility policy. JSON schemas are versioned
 independently from the npm package. A schema version is accepted only by the consumers listed
 below; a matching-looking object with a missing, unknown, or future version is not treated as the
 current schema.

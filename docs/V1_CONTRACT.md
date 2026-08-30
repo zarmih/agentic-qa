@@ -1,6 +1,6 @@
-# v1 public contract candidate
+# v1 public contract
 
-Agentic QA 0.9.0 freezes the 0.8 product behavior for final v1 review. The CLI and persisted JSON
+Agentic QA 1.0.0 freezes the audited product behavior as its v1 contract. The CLI and persisted JSON
 artifacts below are public. TypeScript modules under `dist/` are implementation details: the npm
 package intentionally declares a `bin` entry but no `main`, `exports`, or `types` API.
 
@@ -25,7 +25,7 @@ on command failure they keep stdout empty and emit one JSON error document to st
 
 ## Stable environment configuration
 
-The v1 candidate recognizes these names:
+Version 1 recognizes these names:
 
 ```text
 AGENTIC_QA_NAVIGATION_TIMEOUT_MS

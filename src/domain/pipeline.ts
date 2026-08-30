@@ -26,7 +26,7 @@ export interface PipelineRun {
   readonly profile: PipelineProfile;
   readonly provider: 'openai-compatible';
   readonly model: string;
-  readonly version: '0.8.0' | '0.9.0';
+  readonly version: '0.8.0' | '0.9.0' | '1.0.0';
   readonly startedAt: string;
   readonly completedAt: string;
   readonly durationMs: number;

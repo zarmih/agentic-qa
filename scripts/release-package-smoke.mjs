@@ -76,7 +76,7 @@ try {
       cwd: installDirectory,
     },
   );
-  if (version.stdout.trim() !== '0.9.0') {
+  if (version.stdout.trim() !== '1.0.0') {
     throw new Error(`Installed CLI reported unexpected version: ${version.stdout.trim()}`);
   }
   const help = await execute(process.execPath, [npxCli, '--no-install', 'agentic-qa', '--help'], {

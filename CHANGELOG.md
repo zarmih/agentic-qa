@@ -1,17 +1,20 @@
 # Changelog
 
-Agentic QA follows semantic versioning for user-visible releases. No npm release or v1 tag has
-been published as part of this repository audit.
+Agentic QA follows semantic versioning for user-visible releases. GitHub releases and npm registry
+publication are separate; version 1.0.0 is not published to npm.
 
-## Unreleased — 0.9.0 release candidate
+## 1.0.0 — 2026-08-30
 
-- Added a complete strict exploration/state-graph schema and cross-field consistency validation.
-- Added locale-independent canonical digest ordering.
-- Preserved machine-readable pipeline/report artifacts when Chromium cannot start.
-- Added structured JSON command failures and a three-OS Node 24 package/browser validation matrix.
-- Made generated TypeScript validation and artifact-path tests portable across Windows, macOS, and
-  Linux.
-- Added v1 contract, schema compatibility, performance, security, and release-gate documentation.
+- Released deterministic web and safe interactive state exploration with bounded same-origin
+  navigation.
+- Released provider-neutral grounded QA planning, constrained LLM-free execution, defect
+  reproduction, and deterministic verdicts.
+- Released reviewable Playwright regression generation, human-approved dry-run export, the unified
+  pipeline, and static local HTML reports.
+- Added strict artifact validation, locale-independent SHA-256 integrity, safety boundaries, and
+  release validation on Linux, macOS, and Windows.
+- Documented that forms, authentication, root-cause analysis, automatic fixes, arbitrary LLM browser
+  control, and automatic pull requests are outside the v1 scope.
 
 ## 0.8.0
 

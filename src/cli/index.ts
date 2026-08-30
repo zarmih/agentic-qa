@@ -119,7 +119,7 @@ program
   .description(
     'Explore web applications, verify defects, generate regressions, and export them with human approval.',
   )
-  .version('0.9.0')
+  .version('1.0.0')
   .option('--no-color', 'disable ANSI color output (NO_COLOR is also respected)')
   .showHelpAfterError();
 

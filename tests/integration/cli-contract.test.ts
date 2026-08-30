@@ -16,9 +16,9 @@ afterAll(async () => {
 });
 
 describe('public CLI contract', () => {
-  it('reports the release-candidate version and help for every public command without ANSI', async () => {
+  it('reports the release version and help for every public command without ANSI', async () => {
     const version = await runCli(projectRoot, ['--version']);
-    expect(version).toEqual({ code: 0, stdout: '0.9.0\n', stderr: '' });
+    expect(version).toEqual({ code: 0, stdout: '1.0.0\n', stderr: '' });
     for (const command of [
       'inspect',
       'explore',

@@ -5,8 +5,8 @@ real Chromium, asks a provider-neutral LLM only to propose a grounded test plan,
 through deterministic graph references, verifies reproducibility, generates reviewable
 Playwright regressions, and exports them only after explicit human approval.
 
-Current version: **0.9.0**. This is a v1 release-candidate audit build, not an npm-published
-package and not a v1 release.
+Current version: **1.0.0**. Version 1 is released on GitHub; the package is not published to the npm
+registry.
 
 ## What it can do
 

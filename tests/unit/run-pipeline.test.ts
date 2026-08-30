@@ -102,7 +102,7 @@ describe('RunPipeline', () => {
     });
     expect(outcome.pipeline).toMatchObject({
       schemaVersion: '1.1',
-      version: '0.9.0',
+      version: '1.0.0',
       status: 'FAILED',
       artifacts: { exploration: null },
     });

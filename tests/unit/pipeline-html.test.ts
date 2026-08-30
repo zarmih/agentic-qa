@@ -91,7 +91,7 @@ describe('PipelineHtmlRenderer', () => {
     const failedPipeline: PipelineRun = {
       ...pipeline('run-failed'),
       schemaVersion: '1.1',
-      version: '0.9.0',
+      version: '1.0.0',
       status: 'FAILED',
       artifacts: {
         ...pipeline('run-failed').artifacts,

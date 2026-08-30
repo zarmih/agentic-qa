@@ -1,8 +1,8 @@
 # v1 release checklist
 
-This checklist describes objective release gates. Stage 9 may prepare version 0.9.0, but it must
-not set 1.0.0, tag, publish, or create a GitHub Release. Checked boxes require recorded evidence in
-the final audit and green CI; pending remote gates remain unchecked until their runs complete.
+This checklist records the objective gates established by the Stage 9 audit and the separately
+authorized v1 release step. Checked boxes require recorded evidence; external publication actions
+remain separate from repository validation.
 
 ## Safety and correctness
 
@@ -36,11 +36,11 @@ the final audit and green CI; pending remote gates remain unchecked until their 
 - [x] Release-validation Windows job is green.
 - [x] `main` is synchronized with `origin/main` and the working tree is clean.
 - [x] No unresolved P0 or P1 finding remains.
-- [ ] Human explicitly authorizes the separate v1 release step.
+- [x] Human explicitly authorizes the separate v1 release step.
 
 ## Explicitly outside this audit
 
-- [ ] Version changed to 1.0.0 — requires separate authorization.
+- [x] Version changed to 1.0.0 under separate authorization.
 - [ ] `v1.0.0` Git tag created — requires separate authorization.
 - [ ] npm package published — requires separate authorization.
 - [ ] GitHub Release created — requires separate authorization.
