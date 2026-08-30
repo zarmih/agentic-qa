@@ -30,12 +30,12 @@ the final audit and green CI; pending remote gates remain unchecked until their 
 
 ## CI and release administration
 
-- [ ] Existing Ubuntu Node 24 / Chromium CI is green for the release-candidate SHA.
-- [ ] Release-validation Ubuntu job is green.
-- [ ] Release-validation macOS job is green.
-- [ ] Release-validation Windows job is green.
-- [ ] `main` is synchronized with `origin/main` and the working tree is clean.
-- [ ] No unresolved P0 or P1 finding remains.
+- [x] Existing Ubuntu Node 24 / Chromium CI is green for the release-candidate SHA.
+- [x] Release-validation Ubuntu job is green.
+- [x] Release-validation macOS job is green.
+- [x] Release-validation Windows job is green.
+- [x] `main` is synchronized with `origin/main` and the working tree is clean.
+- [x] No unresolved P0 or P1 finding remains.
 - [ ] Human explicitly authorizes the separate v1 release step.
 
 ## Explicitly outside this audit
