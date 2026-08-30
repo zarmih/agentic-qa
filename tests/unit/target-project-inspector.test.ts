@@ -34,6 +34,9 @@ describe('TargetProjectInspector', () => {
     'C:\\outside',
     'tests\\e2e',
     'a\0b',
+    'tests\noutside',
+    'tests/agentic‐qa',
+    'C:/outside',
   ])('rejects unsafe test directory %s', (value) => {
     expect(() => safeRelativeDirectory(value)).toThrow(/safe|inside/i);
   });

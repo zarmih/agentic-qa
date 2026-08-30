@@ -18,7 +18,12 @@ export function safeRelativeDirectory(value: string, label = 'Test directory'): 
     throw new ConfigurationError(`${label} must be a safe path relative to the target project.`);
   }
   const normalized = posix.normalize(trimmed);
-  if (normalized === '..' || normalized.startsWith('../') || normalized.includes('/../')) {
+  if (
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    normalized.includes('/../') ||
+    !/^[-a-zA-Z0-9_./]+$/.test(normalized)
+  ) {
     throw new ConfigurationError(`${label} must stay inside the target project.`);
   }
   return normalized;
@@ -74,7 +79,7 @@ export class TargetProjectInspector {
       warnings.push('@playwright/test is not declared in the target package.json.');
     }
     if (facts.language === 'javascript') {
-      warnings.push('JavaScript-only targets require manual review; Stage 8 exports TypeScript.');
+      warnings.push('JavaScript-only targets require manual review; export uses TypeScript specs.');
     }
     if (facts.git.dirty === true) {
       warnings.push('The target Git working tree is dirty; export will not stash or reset it.');

@@ -32,6 +32,10 @@ email address, so none is invented here.
 SHA-256 metadata detects changed content in the expected artifact chain. It is integrity checking,
 not a signature, author authentication, or proof that an artifact came from a trusted machine.
 
+Filesystem containment and symlink checks substantially reduce export escapes, but a separate
+local process can still race filesystem components between validation and write. This residual
+time-of-check/time-of-use risk is not claimed to be eliminated.
+
 ## Safe operational use
 
 Run Agentic QA only against applications you are authorized to test. Prefer isolated test/staging
@@ -41,5 +45,13 @@ specs, and the export preview before applying anything to another project.
 `export --validate` explicitly loads the target project's Playwright configuration through its
 already installed local Playwright CLI. A target config is executable project code; use this option
 only for a repository you trust. Validation lists specs and does not run browser tests.
+
+The configured planning provider receives the bounded planning observation. Treat that provider as
+a privacy boundary and review captured application data before sending it. Agentic QA does not
+support authentication workflows or form filling, and a control that merely looks safe can still
+hide a target-side effect. Prefer disposable test data and conservative targets.
+
+Normal exceptions, timeouts, and handled process signals follow bounded cleanup paths. No software
+can guarantee cleanup after an uncatchable termination such as `SIGKILL` or host failure.
 
 See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for mitigations and remaining risks.

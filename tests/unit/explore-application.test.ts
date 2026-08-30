@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ExploreApplication } from '../../src/application/explore-application.js';
+import type { ExplorationRunFailure } from '../../src/application/explore-application.js';
 import type {
   Clock,
   ExplorationArtifactStore,
@@ -87,6 +88,30 @@ const defaults = {
 };
 
 describe('ExploreApplication', () => {
+  it('preserves the prepared run location when browser startup fails', async () => {
+    const browserFailure = new Error('controlled browser startup failure');
+    const failing = new ExploreApplication(
+      { start: () => Promise.reject(browserFailure) },
+      {
+        prepareExploration: () =>
+          Promise.resolve({ directory: '/runs/run-1', tracePath: '/runs/run-1/trace.zip' }),
+        savePageScreenshot: () => Promise.resolve(),
+        saveStateScreenshot: () => Promise.resolve(),
+        saveExploration: () => Promise.resolve(),
+      },
+      { next: () => 'run-1' },
+      { now: () => new Date('2026-01-01T00:00:00.000Z') },
+    );
+
+    await expect(failing.execute('https://app.test/', defaults)).rejects.toMatchObject({
+      name: 'ExplorationRunFailure',
+      runId: 'run-1',
+      startUrl: 'https://app.test/',
+      artifactDirectory: '/runs/run-1',
+      cause: browserFailure,
+    } satisfies Partial<ExplorationRunFailure>);
+  });
+
   it('uses stable BFS order and prevents duplicate and fragment visits', async () => {
     const root = 'https://app.test/';
     const pages = new Map([

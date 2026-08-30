@@ -1,0 +1,46 @@
+# v1 release checklist
+
+This checklist describes objective release gates. Stage 9 may prepare version 0.9.0, but it must
+not set 1.0.0, tag, publish, or create a GitHub Release. Checked boxes require recorded evidence in
+the final audit and green CI; pending remote gates remain unchecked until their runs complete.
+
+## Safety and correctness
+
+- [x] LLM remains planning-only and has no browser/shell/filesystem tools.
+- [x] Plans, executions, findings, manifests, and exploration inputs are strictly revalidated.
+- [x] Destructive/caution/unknown/form/upload/arbitrary URL/selector actions remain blocked.
+- [x] Canonical SHA-256 uses locale-independent serialization and is documented as integrity only.
+- [x] Generated TypeScript and report HTML treat application text as untrusted data.
+- [x] Export is dry-run by default; writes and overwrites require separate explicit approval.
+- [x] Early Chromium startup failure retains a machine-readable pipeline failure record.
+
+## Local quality and product proof
+
+- [x] Clean `npm ci` final gate.
+- [x] Build, typecheck, lint, and format check green from the clean install.
+- [x] Full test suite green for five consecutive runs without retries.
+- [x] Full controlled pipeline creates a confirmed finding, regression, and report.
+- [x] Generated regression fails in bug mode and passes in healthy mode.
+- [x] Destructive server counters remain zero through the complete pipeline.
+- [x] Export dry-run/apply/identical/conflict/overwrite/validate boundaries pass with unchanged Git HEAD.
+- [x] `npm audit` and `npm audit --omit=dev` have an acceptable result.
+- [x] Tarball contents, hash, size, bin resolution, clean production install, help, version,
+      inspect, explore, and interactive explore are verified.
+- [x] Cleanup, determinism, resource bounds, and performance baseline are recorded.
+
+## CI and release administration
+
+- [ ] Existing Ubuntu Node 24 / Chromium CI is green for the release-candidate SHA.
+- [ ] Release-validation Ubuntu job is green.
+- [ ] Release-validation macOS job is green.
+- [ ] Release-validation Windows job is green.
+- [ ] `main` is synchronized with `origin/main` and the working tree is clean.
+- [ ] No unresolved P0 or P1 finding remains.
+- [ ] Human explicitly authorizes the separate v1 release step.
+
+## Explicitly outside this audit
+
+- [ ] Version changed to 1.0.0 — requires separate authorization.
+- [ ] `v1.0.0` Git tag created — requires separate authorization.
+- [ ] npm package published — requires separate authorization.
+- [ ] GitHub Release created — requires separate authorization.

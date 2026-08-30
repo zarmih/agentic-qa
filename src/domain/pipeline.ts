@@ -19,14 +19,14 @@ export interface PipelineStageRecord {
 }
 
 export interface PipelineRun {
-  readonly schemaVersion: '1.0';
+  readonly schemaVersion: '1.0' | '1.1';
   readonly pipelineId: string;
   readonly sourceRunId: string;
   readonly target: string;
   readonly profile: PipelineProfile;
   readonly provider: 'openai-compatible';
   readonly model: string;
-  readonly version: '0.8.0';
+  readonly version: '0.8.0' | '0.9.0';
   readonly startedAt: string;
   readonly completedAt: string;
   readonly durationMs: number;
@@ -35,7 +35,7 @@ export interface PipelineRun {
   readonly artifacts: {
     readonly pipeline: 'pipeline.json';
     readonly report: 'report.html';
-    readonly exploration: string;
+    readonly exploration: string | null;
     readonly plan: string | null;
     readonly execution: string | null;
     readonly verification: string | null;

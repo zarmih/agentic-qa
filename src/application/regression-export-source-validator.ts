@@ -193,7 +193,7 @@ export class RegressionExportSourceValidator {
       warnings:
         manifest.schemaVersion === '1.0'
           ? [
-              'Legacy Stage 7 manifest 1.0 has no payload digest; it was accepted only after full deterministic source and byte revalidation.',
+              'Legacy regression manifest 1.0 has no payload digest; it was accepted only after full deterministic source and byte revalidation.',
             ]
           : [],
       manifestDigest: sha256Digest(manifest),

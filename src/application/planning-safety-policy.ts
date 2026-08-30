@@ -1,4 +1,5 @@
 import { ActionRiskClassifier, type InteractionCandidate } from '../domain/interaction.js';
+import { compareStrings } from '../domain/determinism.js';
 import type {
   ProposedTestScenario,
   ScenarioExecutability,
@@ -58,7 +59,7 @@ export class PlanningScenarioDeduplicator {
         steps: scenario.steps.map((step) => ({
           action: step.action,
           target: Object.fromEntries(
-            Object.entries(step.target).sort(([left], [right]) => left.localeCompare(right)),
+            Object.entries(step.target).sort(([left], [right]) => compareStrings(left, right)),
           ),
           instruction: normalize(step.instruction),
           expected: normalize(step.expected),

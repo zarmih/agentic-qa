@@ -1,3 +1,5 @@
+import { compareStrings } from '../domain/determinism.js';
+
 const UUID_PATTERN =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 const ISO_TIMESTAMP_PATTERN = /\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z\b/gi;
@@ -26,7 +28,7 @@ export function normalizeEvidenceUrl(value: string | null): string | null {
     url.hash = '';
     const sorted = [...url.searchParams.entries()].sort(
       ([leftKey, leftValue], [rightKey, rightValue]) =>
-        leftKey.localeCompare(rightKey) || leftValue.localeCompare(rightValue),
+        compareStrings(leftKey, rightKey) || compareStrings(leftValue, rightValue),
     );
     url.search = '';
     for (const [key, item] of sorted) url.searchParams.append(key, item);

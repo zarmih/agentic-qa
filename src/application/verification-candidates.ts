@@ -3,6 +3,7 @@ import type {
   ExecutionRun,
   ScenarioExecution,
 } from '../domain/execution.js';
+import { compareStrings } from '../domain/determinism.js';
 import type { VerificationCandidate, VerificationTriggerKind } from '../domain/verification.js';
 import { sha256Digest } from './source-integrity.js';
 import { DefectSignatureService } from './verification-signature.js';
@@ -172,7 +173,7 @@ export class VerificationCandidateExtractor {
         .sort(
           (left, right) =>
             TRIGGER_RANK[left.trigger] - TRIGGER_RANK[right.trigger] ||
-            left.entry.id.localeCompare(right.entry.id),
+            compareStrings(left.entry.id, right.entry.id),
         );
       const primary = signals[0];
       if (
@@ -222,7 +223,7 @@ export class VerificationCandidateExtractor {
           TRIGGER_RANK[left.candidate.triggerKind] - TRIGGER_RANK[right.candidate.triggerKind] ||
           PRIORITY_RANK[left.candidate.priority] - PRIORITY_RANK[right.candidate.priority] ||
           left.sourceOrder - right.sourceOrder ||
-          left.candidate.id.localeCompare(right.candidate.id),
+          compareStrings(left.candidate.id, right.candidate.id),
       )
       .map((item) => item.candidate);
   }

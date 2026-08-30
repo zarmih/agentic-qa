@@ -37,6 +37,7 @@ import { ConsoleReporter } from '../reporting/console-reporter.js';
 import { TypeScriptRegressionValidator } from '../infrastructure/typescript-regression-validator.js';
 import { PrettierRegressionFormatter } from '../infrastructure/prettier-regression-formatter.js';
 import { PipelineHtmlRenderer } from '../reporting/pipeline-html.js';
+import { ConfigurationError } from '../application/errors.js';
 import {
   PIPELINE_PROFILE_LIMITS,
   PIPELINE_PROFILES,
@@ -118,7 +119,7 @@ program
   .description(
     'Explore web applications, verify defects, generate regressions, and export them with human approval.',
   )
-  .version('0.8.0')
+  .version('0.9.0')
   .option('--no-color', 'disable ANSI color output (NO_COLOR is also respected)')
   .showHelpAfterError();
 
@@ -153,7 +154,7 @@ program
 program
   .command('plan')
   .description('Generate a grounded QA plan from an existing exploration.json artifact.')
-  .argument('<exploration-json>', 'path to a Stage 3 exploration.json artifact')
+  .argument('<exploration-json>', 'path to an exploration.json artifact')
   .option('--provider <kind>', 'reasoning provider protocol', 'openai-compatible')
   .option('--model <model>', 'model name; overrides AGENTIC_QA_LLM_MODEL')
   .option('--llm-timeout <milliseconds>', 'reasoning provider timeout in milliseconds')
@@ -180,7 +181,7 @@ program
 program
   .command('run')
   .description('Execute validated AUTOMATABLE scenarios using graph-backed browser replay.')
-  .argument('<qa-plan-json>', 'path to a Stage 5 qa-plan.json artifact')
+  .argument('<qa-plan-json>', 'path to a qa-plan.json artifact')
   .option('--exploration <path>', 'explicit source exploration.json path')
   .option('--headed', 'show the Chromium browser window')
   .option('--max-scenarios <count>', 'maximum AUTOMATABLE scenarios to execute')
@@ -223,7 +224,7 @@ program
 program
   .command('verify')
   .description('Reproduce execution signals and create deterministic defect findings.')
-  .argument('<execution-json>', 'path to a Stage 5 execution.json artifact')
+  .argument('<execution-json>', 'path to an execution.json artifact')
   .option('--attempts <count>', 'isolated reproduction attempts per rerunnable candidate')
   .option('--max-findings <count>', 'maximum verification candidates to process')
   .option('--headed', 'show Chromium during reproduction attempts')
@@ -273,7 +274,7 @@ program
 program
   .command('generate')
   .description('Generate reviewable Playwright regressions from verified defect findings.')
-  .argument('<findings-json>', 'path to a Stage 6 findings.json artifact')
+  .argument('<findings-json>', 'path to a findings.json artifact')
   .option('--include-flaky', 'emit flaky findings as disabled test.fixme specs')
   .option('--max-tests <count>', 'maximum generated Playwright spec files')
   .option('--base-url <origin>', 'replace the source origin while preserving graph paths')
@@ -307,7 +308,7 @@ program
 program
   .command('export')
   .description('Preview or apply a human-approved export into an existing Playwright project.')
-  .argument('<manifest-json>', 'path to a Stage 7 regression manifest.json artifact')
+  .argument('<manifest-json>', 'path to a regression manifest.json artifact')
   .requiredOption('--target <directory>', 'target project directory')
   .option('--tests-dir <path>', 'target test directory relative to the project root')
   .option('--apply', 'write planned files into the target project')
@@ -345,7 +346,8 @@ program
       reporter.regressionExport(outcome, commandOptions.json === true);
       process.exitCode = outcome.exitCode;
     } catch (error) {
-      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      if (commandOptions.json === true) reporter.failureJson(error, 'EXPORT_FAILED');
+      else reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
       process.exitCode = 2;
     }
   });
@@ -371,7 +373,9 @@ program
   .action(async (url: string, commandOptions: PipelineCommandOptions) => {
     try {
       if (!PIPELINE_PROFILES.includes(commandOptions.profile)) {
-        throw new Error(`Pipeline profile must be one of: ${PIPELINE_PROFILES.join(', ')}.`);
+        throw new ConfigurationError(
+          `Pipeline profile must be one of: ${PIPELINE_PROFILES.join(', ')}.`,
+        );
       }
       const limits = PIPELINE_PROFILE_LIMITS[commandOptions.profile];
       const profileEnvironment: NodeJS.ProcessEnv = {
@@ -516,7 +520,8 @@ program
       reporter.pipeline(outcome, commandOptions.json === true);
       process.exitCode = outcome.exitCode;
     } catch (error) {
-      reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
+      if (commandOptions.json === true) reporter.failureJson(error, 'PIPELINE_FAILED');
+      else reporter.failure(error, process.env.AGENTIC_QA_DEBUG === 'true');
       process.exitCode = 2;
     }
   });

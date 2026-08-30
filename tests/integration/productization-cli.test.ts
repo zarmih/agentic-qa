@@ -16,6 +16,7 @@ const execFileAsync = promisify(execFile);
 const projectRoot = resolve(import.meta.dirname, '../..');
 let miniApp: MiniAppServer;
 let temporaryDirectory = '';
+const retainedAuditDirectory = process.env.AGENTIC_QA_AUDIT_OUTPUT_DIR;
 
 async function onlyChild(directory: string): Promise<string> {
   const entries = await readdir(directory);
@@ -25,6 +26,16 @@ async function onlyChild(directory: string): Promise<string> {
   return entries[0];
 }
 
+async function textFiles(directory: string): Promise<readonly string[]> {
+  const values: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) values.push(...(await textFiles(path)));
+    else if (/\.(?:json|md|html|ts)$/i.test(entry.name)) values.push(await readFile(path, 'utf8'));
+  }
+  return values;
+}
+
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -32,16 +43,24 @@ function sha256(value: string): string {
 beforeAll(async () => {
   miniApp = await startMiniAppServer();
   await mkdir(join(projectRoot, 'artifacts'), { recursive: true });
-  temporaryDirectory = await mkdtemp(join(projectRoot, 'artifacts', 'stage8-e2e-'));
+  if (retainedAuditDirectory === undefined) {
+    temporaryDirectory = await mkdtemp(join(projectRoot, 'artifacts', 'product-e2e-'));
+  } else {
+    temporaryDirectory = resolve(retainedAuditDirectory);
+    await mkdir(temporaryDirectory, { recursive: true });
+  }
 });
 
 afterAll(async () => {
   await miniApp.close();
-  await rm(temporaryDirectory, { recursive: true, force: true });
+  if (retainedAuditDirectory === undefined) {
+    await rm(temporaryDirectory, { recursive: true, force: true });
+  }
 });
 
 describe('Stage 8 product CLI', () => {
   it('runs the unified pipeline, renders an injection-safe report, and exports only after approval', async () => {
+    const syntheticSecret = 'aq-release-audit-secret-never-persist';
     const artifacts = join(temporaryDirectory, 'runs');
     let provider: FakeLlmServer | null = null;
     let pipelineCli;
@@ -67,6 +86,7 @@ describe('Stage 8 product CLI', () => {
         ],
         {
           AGENTIC_QA_LLM_BASE_URL: provider.baseUrl,
+          AGENTIC_QA_LLM_API_KEY: syntheticSecret,
           AGENTIC_QA_LLM_TIMEOUT_MS: '3000',
           AGENTIC_QA_NAVIGATION_TIMEOUT_MS: '3000',
           AGENTIC_QA_STEP_TIMEOUT_MS: '3000',
@@ -77,6 +97,8 @@ describe('Stage 8 product CLI', () => {
     } finally {
       await provider?.close();
     }
+    expect(provider.requests[0]?.authorization).toBe(`Bearer ${syntheticSecret}`);
+    expect(provider.requests[0]?.rawBody).not.toContain(syntheticSecret);
     expect(pipelineCli).toMatchObject({ code: 1, stderr: '' });
     const machineOutput = JSON.parse(pipelineCli.stdout) as {
       readonly pipeline: PipelineRun;
@@ -155,13 +177,13 @@ describe('Stage 8 product CLI', () => {
       join(target, 'playwright.config.ts'),
       `import { defineConfig } from '@playwright/test';\nexport default defineConfig({ testDir: './tests', use: { baseURL: '${miniApp.baseUrl}' } });\n`,
     );
-    await execFileAsync('ln', [
-      '-s',
-      join(projectRoot, 'node_modules'),
-      join(target, 'node_modules'),
-    ]);
-    await execFileAsync('git', ['init', '-q', '-b', 'main'], { cwd: target });
-    await execFileAsync('git', ['add', '.'], { cwd: target });
+    await execFileAsync(
+      'ln',
+      ['-s', join(projectRoot, 'node_modules'), join(target, 'node_modules')],
+      { shell: false },
+    );
+    await execFileAsync('git', ['init', '-q', '-b', 'main'], { cwd: target, shell: false });
+    await execFileAsync('git', ['add', '.'], { cwd: target, shell: false });
     await execFileAsync(
       'git',
       [
@@ -173,10 +195,10 @@ describe('Stage 8 product CLI', () => {
         '-qm',
         'fixture',
       ],
-      { cwd: target },
+      { cwd: target, shell: false },
     );
     const headBefore = (
-      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target })
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target, shell: false })
     ).stdout.trim();
     const targetSpec = join(target, 'tests', 'agentic-qa', generated.file.split('/').at(-1) ?? '');
 
@@ -217,9 +239,23 @@ describe('Stage 8 product CLI', () => {
     expect(sha256(exportedSource)).toBe(generated.fileDigest);
     expect((await stat(targetSpec)).size).toBeGreaterThan(100);
     const headAfter = (
-      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target })
+      await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target, shell: false })
     ).stdout.trim();
     expect(headAfter).toBe(headBefore);
+
+    const identical = await runCli(projectRoot, [
+      'export',
+      join(runDirectory, manifestPath),
+      '--target',
+      target,
+      '--apply',
+      '--json',
+    ]);
+    expect(identical).toMatchObject({ code: 0, stderr: '' });
+    expect(JSON.parse(identical.stdout)).toMatchObject({
+      plan: { summary: { identical: 1, changesToApply: 0 } },
+      receipt: { files: [expect.objectContaining({ action: 'UNCHANGED' })] },
+    });
 
     await writeFile(targetSpec, '// human-owned conflicting content\n');
     const conflict = await runCli(projectRoot, [
@@ -240,9 +276,31 @@ describe('Stage 8 product CLI', () => {
     });
     expect(conflict.stdout).toContain('will not stash or reset');
     expect(await readFile(targetSpec, 'utf8')).toBe('// human-owned conflicting content\n');
-    expect((await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target })).stdout.trim()).toBe(
-      headBefore,
-    );
+    expect(
+      (
+        await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target, shell: false })
+      ).stdout.trim(),
+    ).toBe(headBefore);
+
+    const overwrite = await runCli(projectRoot, [
+      'export',
+      join(runDirectory, manifestPath),
+      '--target',
+      target,
+      '--apply',
+      '--overwrite',
+      '--json',
+    ]);
+    expect(overwrite).toMatchObject({ code: 0, stderr: '' });
+    expect(JSON.parse(overwrite.stdout)).toMatchObject({
+      receipt: { files: [expect.objectContaining({ action: 'OVERWRITTEN' })] },
+    });
+    expect(sha256(await readFile(targetSpec, 'utf8'))).toBe(generated.fileDigest);
+    expect(
+      (
+        await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: target, shell: false })
+      ).stdout.trim(),
+    ).toBe(headBefore);
 
     const generatedSpec = join(runDirectory, pipeline.artifacts.generation ?? '', generated.file);
     const originalGeneratedSource = await readFile(generatedSpec, 'utf8');
@@ -276,6 +334,13 @@ describe('Stage 8 product CLI', () => {
     expect(corruptedManifest.code).toBe(2);
     expect(corruptedManifest.stderr).toMatch(/payload digest/i);
     await writeFile(manifestFile, originalManifest);
+
+    expect(
+      (await textFiles(runDirectory)).every((contents) => !contents.includes(syntheticSecret)),
+    ).toBe(true);
+    expect((await textFiles(target)).every((contents) => !contents.includes(syntheticSecret))).toBe(
+      true,
+    );
 
     expect(await miniApp.pipelineAttempts()).toEqual({ stable: 5, healthy: 2 });
     expect(await miniApp.counters()).toMatchObject({

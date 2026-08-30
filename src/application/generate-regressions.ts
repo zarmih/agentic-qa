@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { compareStrings } from '../domain/determinism.js';
 import type {
   RegressionGenerationLimits,
   RegressionGenerationStatus,
@@ -66,7 +67,7 @@ function ordered(findings: readonly DefectFinding[]): readonly DefectFinding[] {
         VERDICT_RANK[left.finding.verdict] - VERDICT_RANK[right.finding.verdict] ||
         SEVERITY_RANK[left.finding.severity] - SEVERITY_RANK[right.finding.severity] ||
         left.index - right.index ||
-        left.finding.id.localeCompare(right.finding.id),
+        compareStrings(left.finding.id, right.finding.id),
     )
     .map(({ finding }) => finding);
 }

@@ -23,7 +23,6 @@ export type ErrorCode =
   | 'EXPORT_TARGET_UNSAFE'
   | 'EXPORT_CONFLICT'
   | 'EXPORT_WRITE_FAILED'
-  | 'EXPORT_VALIDATION_FAILED'
   | 'PIPELINE_FAILED'
   | 'REPORT_SOURCE_INVALID';
 
@@ -207,12 +206,6 @@ export class ExportConflictError extends AgenticQaError {
 export class ExportWriteError extends AgenticQaError {
   public constructor(message: string, options?: ErrorOptions) {
     super('EXPORT_WRITE_FAILED', message, options);
-  }
-}
-
-export class ExportValidationError extends AgenticQaError {
-  public constructor(message: string, options?: ErrorOptions) {
-    super('EXPORT_VALIDATION_FAILED', message, options);
   }
 }
 

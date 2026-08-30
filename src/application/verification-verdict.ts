@@ -1,5 +1,6 @@
 import type { ExecutionEvidenceEntry, ExecutionRun, ExecutionStatus } from '../domain/execution.js';
 import type { ExplorationResult } from '../domain/exploration.js';
+import { compareStrings } from '../domain/determinism.js';
 import type { QaPlan, TestScenario } from '../domain/planning.js';
 import type {
   DefectCategory,
@@ -59,7 +60,7 @@ export class ReproducibilityClassifier {
       .map(([signatureHash, value]) => ({ signatureHash, ...value }))
       .sort(
         (left, right) =>
-          right.count - left.count || left.signatureHash.localeCompare(right.signatureHash),
+          right.count - left.count || compareStrings(left.signatureHash, right.signatureHash),
       );
     const incompatible = signatureDistribution.some(
       (entry) => entry.signatureHash !== candidate.signature.hash,

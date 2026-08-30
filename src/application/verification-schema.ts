@@ -280,7 +280,7 @@ function errors(error: z.ZodError): readonly string[] {
 export function parseSavedVerification(value: unknown): VerificationRun {
   if (legacy(value)) {
     throw new SavedVerificationValidationError([
-      'schemaVersion: legacy Stage 6 verification has no result integrity digest; run verify again',
+      'schemaVersion: legacy verification has no result integrity digest; run verify again',
     ]);
   }
   const parsed = verificationRunSchema.safeParse(value);
@@ -291,7 +291,7 @@ export function parseSavedVerification(value: unknown): VerificationRun {
 export function parseSavedFindings(value: unknown): FindingsArtifact {
   if (legacy(value)) {
     throw new SavedVerificationValidationError([
-      'schemaVersion: legacy Stage 6 findings have no result integrity digest; run verify again',
+      'schemaVersion: legacy findings have no result integrity digest; run verify again',
     ]);
   }
   const parsed = findingsArtifactSchema.safeParse(value);

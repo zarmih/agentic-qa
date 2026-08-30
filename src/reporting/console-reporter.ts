@@ -8,6 +8,7 @@ import type { GenerateRegressionsOutcome } from '../application/generate-regress
 import type { ExportRegressionsOutcome } from '../application/export-regressions.js';
 import type { RunPipelineOutcome } from '../application/run-pipeline.js';
 import type { RenderPipelineReportOutcome } from '../application/render-pipeline-report.js';
+import { AgenticQaError } from '../application/errors.js';
 
 export interface Output {
   log(message: string): void;
@@ -326,5 +327,18 @@ export class ConsoleReporter {
         this.output.error(`Caused by: ${error.cause.stack ?? error.cause.message}`);
       }
     }
+  }
+
+  public failureJson(error: unknown, fallbackCode: string): void {
+    const recognized = error instanceof AgenticQaError;
+    this.output.error(
+      JSON.stringify({
+        error: {
+          code: recognized ? error.code : fallbackCode,
+          message: recognized ? error.message : 'An unexpected error occurred.',
+        },
+        exitCode: 2,
+      }),
+    );
   }
 }

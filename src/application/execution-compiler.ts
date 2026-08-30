@@ -144,7 +144,7 @@ export class ScenarioExecutionCompiler {
           scenario,
           originalIndex,
           'UNSUPPORTED_ACTION',
-          'Stage 5 executes only graph-backed NAVIGATE and CLICK steps.',
+          'Execution supports only graph-backed NAVIGATE and CLICK steps.',
         );
       }
 

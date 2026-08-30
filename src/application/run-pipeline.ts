@@ -16,7 +16,11 @@ import type {
   PipelineRunner,
   PipelineVerifier,
 } from './pipeline-ports.js';
-import type { ExploreApplicationOptions, ExplorationOutcome } from './explore-application.js';
+import {
+  ExplorationRunFailure,
+  type ExploreApplicationOptions,
+  type ExplorationOutcome,
+} from './explore-application.js';
 import type { PlanQaOptions, PlanQaOutcome } from './plan-qa.js';
 import type { RunQaPlanOptions, RunQaPlanOutcome } from './run-qa-plan.js';
 import type { VerifyExecutionOptions, VerifyExecutionOutcome } from './verify-execution.js';
@@ -25,7 +29,7 @@ import type {
   GenerateRegressionsOutcome,
 } from './generate-regressions.js';
 import type { PipelineProfile } from '../domain/pipeline.js';
-import { PipelineError } from './errors.js';
+import { ArtifactWriteError, PipelineError } from './errors.js';
 
 export interface RunPipelineOptions {
   readonly profile: PipelineProfile;
@@ -114,6 +118,11 @@ export class RunPipeline {
         },
       );
     } catch (error) {
+      if (error instanceof ExplorationRunFailure) {
+        stages[0] = this.failedStage('explore', explorationStarted, error);
+        return this.finishExplorationFailure({ error, startedAt, options, stages });
+      }
+      if (error instanceof ArtifactWriteError) throw error;
       throw new PipelineError(
         `Explore failed before a pipeline artifact could be created: ${cleanError(error)}`,
         {
@@ -331,6 +340,57 @@ export class RunPipeline {
     });
   }
 
+  private async finishExplorationFailure(input: {
+    readonly error: ExplorationRunFailure;
+    readonly startedAt: Date;
+    readonly options: RunPipelineOptions;
+    readonly stages: readonly PipelineStageRecord[];
+  }): Promise<RunPipelineOutcome> {
+    const completedAt = this.clock.now();
+    const pipeline: PipelineRun = {
+      schemaVersion: '1.1',
+      pipelineId: `pipeline-${input.error.runId}`,
+      sourceRunId: input.error.runId,
+      target: input.error.startUrl,
+      profile: input.options.profile,
+      provider: input.options.provider,
+      model: input.options.model.slice(0, 200),
+      version: '0.9.0',
+      startedAt: input.startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs: Math.max(0, completedAt.getTime() - input.startedAt.getTime()),
+      status: 'FAILED',
+      stages: input.stages,
+      artifacts: {
+        pipeline: 'pipeline.json',
+        report: 'report.html',
+        exploration: null,
+        plan: null,
+        execution: null,
+        verification: null,
+        findings: null,
+        generation: null,
+        manifest: null,
+      },
+      warnings: [],
+    };
+    const data: PipelineReportData = {
+      pipeline,
+      exploration: null,
+      plan: null,
+      execution: null,
+      verification: null,
+      manifest: null,
+    };
+    await this.artifacts.save(input.error.artifactDirectory, pipeline, this.renderer.render(data));
+    return {
+      pipeline,
+      artifactDirectory: input.error.artifactDirectory,
+      reportFile: join(input.error.artifactDirectory, 'report.html'),
+      exitCode: 2,
+    };
+  }
+
   private async finish(input: {
     readonly status: PipelineStatus;
     readonly startedAt: Date;
@@ -346,14 +406,14 @@ export class RunPipeline {
     const completedAt = this.clock.now();
     const runDirectory = input.exploration.artifactDirectory;
     const pipeline: PipelineRun = {
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       pipelineId: `pipeline-${input.exploration.result.runId}`,
       sourceRunId: input.exploration.result.runId,
       target: input.exploration.result.startUrl,
       profile: input.options.profile,
       provider: input.options.provider,
       model: input.options.model.slice(0, 200),
-      version: '0.8.0',
+      version: '0.9.0',
       startedAt: input.startedAt.toISOString(),
       completedAt: completedAt.toISOString(),
       durationMs: Math.max(0, completedAt.getTime() - input.startedAt.getTime()),

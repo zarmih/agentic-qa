@@ -31,7 +31,7 @@ export interface PipelineGenerator {
 
 export interface PipelineReportData {
   readonly pipeline: PipelineRun;
-  readonly exploration: ExplorationOutcome['result'];
+  readonly exploration: ExplorationOutcome['result'] | null;
   readonly plan: PlanQaOutcome['plan'] | null;
   readonly execution: RunQaPlanOutcome['result'] | null;
   readonly verification: VerifyExecutionOutcome['result'] | null;

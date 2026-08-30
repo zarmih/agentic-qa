@@ -8,6 +8,10 @@ import { PlanningObservationCompiler } from '../../src/application/planning-obse
 import { planningExplorationFixture } from '../fixtures/planning-fixtures.js';
 
 describe('source integrity', () => {
+  it('uses locale-independent code-unit ordering for canonical object keys', () => {
+    expect(canonicalJson({ ä: 1, z: 2, A: 3, a: 4 })).toBe('{"A":3,"a":4,"z":2,"ä":1}');
+  });
+
   it('canonicalizes object keys while preserving array order', () => {
     expect(canonicalJson({ b: 2, a: { d: 4, c: 3 } })).toBe(
       canonicalJson({ a: { c: 3, d: 4 }, b: 2 }),

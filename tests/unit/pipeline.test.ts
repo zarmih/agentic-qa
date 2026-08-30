@@ -19,13 +19,19 @@ function validPipeline() {
     completedAt: '2026-08-29T00:00:01.000Z',
     durationMs: 1_000,
     status: 'COMPLETE_WITH_REGRESSIONS',
-    stages: ['explore', 'plan', 'run', 'verify', 'generate'].map((name) => ({
+    stages: [
+      ['explore', 'exploration.json'],
+      ['plan', 'planning/qa-plan.json'],
+      ['run', 'executions/e/execution.json'],
+      ['verify', 'verifications/v/verification.json'],
+      ['generate', 'regressions/g/manifest.json'],
+    ].map(([name, artifact]) => ({
       name,
       status: 'PASS',
       startedAt: '2026-08-29T00:00:00.000Z',
       completedAt: '2026-08-29T00:00:01.000Z',
       durationMs: 100,
-      artifact: `${name}.json`,
+      artifact,
       summary: {},
       error: null,
     })),
@@ -75,6 +81,61 @@ describe('pipeline product model', () => {
     );
   });
 
+  it('accepts a current failed-exploration record and rejects future versions', () => {
+    const legacy = validPipeline();
+    const failed = {
+      ...legacy,
+      schemaVersion: '1.1',
+      version: '0.9.0',
+      status: 'FAILED',
+      stages: legacy.stages.map((stage, index) =>
+        index === 0
+          ? {
+              ...stage,
+              status: 'FAILED',
+              artifact: null,
+              error: 'Chromium could not start.',
+            }
+          : {
+              ...stage,
+              status: 'NOT_RUN',
+              startedAt: null,
+              completedAt: null,
+              durationMs: 0,
+              artifact: null,
+              summary: {},
+              error: null,
+            },
+      ),
+      artifacts: {
+        pipeline: 'pipeline.json',
+        report: 'report.html',
+        exploration: null,
+        plan: null,
+        execution: null,
+        verification: null,
+        findings: null,
+        generation: null,
+        manifest: null,
+      },
+    };
+    expect(parseSavedPipeline(failed)).toMatchObject({
+      schemaVersion: '1.1',
+      version: '0.9.0',
+      status: 'FAILED',
+      artifacts: { exploration: null },
+    });
+    expect(() => parseSavedPipeline({ ...failed, schemaVersion: '999.0' })).toThrow(
+      SavedPipelineValidationError,
+    );
+    expect(() =>
+      parseSavedPipeline({
+        ...failed,
+        artifacts: { ...failed.artifacts, plan: 'planning/qa-plan.json' },
+      }),
+    ).toThrow(/may be null only/);
+  });
+
   it.each(['/absolute.json', '../outside.json', 'safe/../../outside.json', 'https://evil.test/x'])(
     'rejects an unsafe pipeline artifact reference %s',
     (value) => {
@@ -93,5 +154,26 @@ describe('pipeline product model', () => {
     expect(() =>
       parseSavedPipeline({ ...pipeline, stages: [...pipeline.stages].reverse() }),
     ).toThrow(/canonical order/);
+  });
+
+  it('rejects status, stage metadata, and derived artifact inconsistencies', () => {
+    const pipeline = validPipeline();
+    expect(() => parseSavedPipeline({ ...pipeline, status: 'FAILED' })).toThrow(
+      /every stage completed/,
+    );
+    expect(() =>
+      parseSavedPipeline({
+        ...pipeline,
+        stages: pipeline.stages.map((stage, index) =>
+          index === 2 ? { ...stage, artifact: 'executions/other/execution.json' } : stage,
+        ),
+      }),
+    ).toThrow(/canonical artifact reference/);
+    expect(() =>
+      parseSavedPipeline({
+        ...pipeline,
+        artifacts: { ...pipeline.artifacts, findings: 'verifications/other/findings.json' },
+      }),
+    ).toThrow(/verification artifact directory/);
   });
 });

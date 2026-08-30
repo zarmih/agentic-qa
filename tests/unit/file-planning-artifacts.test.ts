@@ -26,7 +26,7 @@ async function temporaryFile(contents: string): Promise<string> {
 }
 
 describe('FilePlanningArtifacts', () => {
-  it('loads a compatible Stage 3 artifact and rejects malformed or incompatible input', async () => {
+  it('loads a compatible exploration artifact and rejects malformed or incompatible input', async () => {
     const artifacts = new FilePlanningArtifacts();
     const validPath = await temporaryFile(JSON.stringify(planningExplorationFixture()));
     await expect(artifacts.loadExploration(validPath)).resolves.toMatchObject({
@@ -37,6 +37,61 @@ describe('FilePlanningArtifacts', () => {
     await expect(artifacts.loadExploration(validPath)).rejects.toBeInstanceOf(PlanningSourceError);
     await writeFile(validPath, JSON.stringify({ schemaVersion: '2.0' }), 'utf8');
     await expect(artifacts.loadExploration(validPath)).rejects.toBeInstanceOf(PlanningSourceError);
+  });
+
+  it('rejects future schemas, unknown fields, inconsistent summaries, and incomplete graph descriptors', async () => {
+    const artifacts = new FilePlanningArtifacts();
+    const source = planningExplorationFixture();
+    const path = await temporaryFile(JSON.stringify({ ...source, schemaVersion: '999.0' }));
+    await expect(artifacts.loadExploration(path)).rejects.toBeInstanceOf(PlanningSourceError);
+
+    await writeFile(path, JSON.stringify({ ...source, selector: '#delete-account' }), 'utf8');
+    await expect(artifacts.loadExploration(path)).rejects.toBeInstanceOf(PlanningSourceError);
+
+    await writeFile(
+      path,
+      JSON.stringify({ ...source, summary: { ...source.summary, pagesVisited: 999 } }),
+      'utf8',
+    );
+    await expect(artifacts.loadExploration(path)).rejects.toBeInstanceOf(PlanningSourceError);
+
+    const navigationEdge = source.graph.edges[0];
+    if (navigationEdge === undefined) throw new Error('Fixture navigation edge missing.');
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...source,
+        summary: { ...source.summary, linksDiscovered: 2 },
+        graph: { ...source.graph, edges: [navigationEdge, navigationEdge] },
+      }),
+      'utf8',
+    );
+    await expect(artifacts.loadExploration(path)).rejects.toThrow(
+      /duplicate navigation edge identifier/,
+    );
+
+    const action = source.stateGraph?.edges[0];
+    if (source.stateGraph === null || action === undefined)
+      throw new Error('Fixture action missing.');
+    const actionWithoutLocator = {
+      actionType: action.action.actionType,
+      identity: action.action.identity,
+      role: action.action.role,
+      accessibleName: action.action.accessibleName,
+      visibleText: action.action.visibleText,
+    };
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...source,
+        stateGraph: {
+          ...source.stateGraph,
+          edges: [{ ...action, action: actionWithoutLocator }],
+        },
+      }),
+      'utf8',
+    );
+    await expect(artifacts.loadExploration(path)).rejects.toBeInstanceOf(PlanningSourceError);
   });
 
   it('defensively redacts the configured secret from every planning artifact', async () => {

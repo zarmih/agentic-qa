@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { compareStrings } from '../domain/determinism.js';
 import type { ExplorationResult } from '../domain/exploration.js';
 import type { PlanningObservation, QaPlan, SourceIntegrity } from '../domain/planning.js';
 
@@ -8,7 +9,7 @@ function canonicalValue(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Readonly<Record<string, unknown>>)
         .filter(([, item]) => item !== undefined)
-        .sort(([left], [right]) => left.localeCompare(right))
+        .sort(([left], [right]) => compareStrings(left, right))
         .map(([key, item]) => [key, canonicalValue(item)]),
     );
   }

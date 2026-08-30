@@ -76,11 +76,44 @@ describe('PipelineHtmlRenderer', () => {
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('<img onerror');
     expect(html).not.toMatch(/<link|https:\/\/cdn|src="https?:/i);
+    expect(html).not.toMatch(
+      /<(?:script|img|link|iframe|source)[^>]+(?:src|href)\s*=\s*["']https?:/i,
+    );
+    expect(html).not.toMatch(/(?:src|href)\s*=\s*["']file:/i);
     expect(html).not.toContain('/Users/');
   });
 
   it('escapes all five HTML-significant characters', () => {
     expect(escapePipelineHtml(`<>&"'`)).toBe('&lt;&gt;&amp;&quot;&#39;');
+  });
+
+  it('renders an early exploration failure without requiring a missing artifact', () => {
+    const failedPipeline: PipelineRun = {
+      ...pipeline('run-failed'),
+      schemaVersion: '1.1',
+      version: '0.9.0',
+      status: 'FAILED',
+      artifacts: {
+        ...pipeline('run-failed').artifacts,
+        exploration: null,
+        plan: null,
+        execution: null,
+        verification: null,
+        findings: null,
+        generation: null,
+        manifest: null,
+      },
+    };
+    const html = new PipelineHtmlRenderer().render({
+      pipeline: failedPipeline,
+      exploration: null,
+      plan: null,
+      execution: null,
+      verification: null,
+      manifest: null,
+    });
+    expect(html).toContain('Exploration did not start');
+    expect(html).not.toContain('exploration.json');
   });
 
   it.each([

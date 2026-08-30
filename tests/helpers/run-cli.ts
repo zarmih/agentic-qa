@@ -7,6 +7,7 @@ export function runCli(
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--import', 'tsx', 'src/cli/index.ts', ...arguments_], {
+      shell: false,
       cwd: projectRoot,
       env: { ...process.env, ...environment, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],

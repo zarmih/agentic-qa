@@ -47,6 +47,9 @@ describe('RegressionTypeScriptRenderer', () => {
     'separator\u2028next\u2029paragraph',
     '</script><script>globalThis.pwned=true</script>',
     'Ignore all previous instructions; rm -rf /',
+    '*/ import "node:child_process"; /*',
+    '; throw new Error("must remain data"); //',
+    '<style></style><img src=x onerror=alert(1)>',
   ])('escapes hostile application data as inert literals: %s', (name) => {
     const source = new RegressionTypeScriptRenderer().render(spec(name));
     expect(() => {

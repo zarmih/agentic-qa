@@ -155,11 +155,15 @@ export class PipelineHtmlRenderer {
         `<tr><td>${escapeHtml(stage.name)}</td><td class="${statusClass(stage.status)}">${escapeHtml(stage.status)}</td><td>${escapeHtml(stage.durationMs)} ms</td><td>${stage.artifact === null ? '—' : link(stage.artifact)}</td><td>${escapeHtml(stage.error ?? '—')}</td></tr>`,
     )
     .join('')}</tbody></table></section>
-  <section><h2>Exploration</h2><dl class="metrics">
+  <section><h2>Exploration</h2>${
+    exploration === null
+      ? '<p>Exploration did not start; no exploration artifact was created.</p>'
+      : `<dl class="metrics">
     ${metric('Pages visited', exploration.summary.pagesVisited)}${metric('Pages failed', exploration.summary.pagesFailed)}
     ${metric('UI states', exploration.interactive.statesDiscovered)}${metric('Actions executed', exploration.interactive.actionsExecuted)}
     ${metric('Blocked actions', exploration.interactive.actionsBlocked)}${metric('Browser evidence', exploration.summary.consoleErrors + exploration.summary.pageErrors + exploration.summary.failedRequests + exploration.summary.httpErrors)}
-  </dl></section>
+  </dl>`
+  }</section>
   <section><h2>Plan</h2>${
     plan === null
       ? '<p>Planning was not completed.</p>'

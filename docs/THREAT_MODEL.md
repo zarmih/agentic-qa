@@ -21,11 +21,23 @@ target repository content are not implicitly trusted.
 | Automatic Git mutation/publication | Export → target repository/remote            | Export uses read-only status/diff calls only; no add, commit, stash, checkout, push, PR, or remote API exists.                                                                                                | Users can independently run Git commands after export; the receipt cannot attest to later actions.                                           |
 | HTML/report XSS                    | Captured text/artifact paths → local report  | Deterministic no-JS renderer, strict CSP, complete HTML escaping, safe relative links, no CDN/network resources.                                                                                              | Browsers and extensions interpret local files differently; keep the artifact bundle on a trusted machine.                                    |
 | Secret leakage                     | Environment/provider → logs/artifacts/report | API keys have no CLI argument, are not placed in prompts, and configured secret values are redacted before planning persistence; report uses saved non-secret artifacts.                                      | Target content itself can contain sensitive data; screenshots/evidence require human handling and retention policy.                          |
+| Provider privacy/trust             | Planning observation → configured provider   | Only the bounded observation is sent; no browser, filesystem, shell, or tool capability is exposed; configured API secrets are not part of the observation.                                                   | The provider can retain or process submitted application observations according to its own policy. Review target data and provider terms.    |
 | Resource exhaustion                | Hostile site/model/artifact → runtime        | Page/state/action/evidence/context/scenario/attempt/spec/file-size/time limits are hard bounded; popups/downloads are closed or cancelled.                                                                    | Thorough profiles and expensive target pages can still consume substantial CPU, disk, network, and time within the configured bounds.        |
+| Process interruption               | OS signal/host failure → cleanup             | Normal failures, timeouts, and handled lifecycle exits use `finally` cleanup for pages, contexts, browsers, traces, servers, and temporary package-smoke directories.                                         | `SIGKILL`, power loss, runtime crashes, or hostile external processes can leave OS resources or partial artifacts; recovery is operational.  |
 
-## Stage 8 approval boundary
+## Release-candidate approval boundary
 
 The unified pipeline ends at regression generation. It cannot invoke export. `export` first builds
 and persists a machine-readable preview; only an explicit `--apply` authorizes dedicated spec-file
 writes. Optional validation is separate explicit consent and does not run a browser test. No stage
 publishes packages, modifies Git history, or contacts a source-control hosting API.
+
+## Explicit non-goals and residual risks
+
+- SHA-256 detects content changes; it does not authenticate an author or machine.
+- `export --validate` executes the trusted target project's Playwright configuration.
+- Filesystem containment is checked before writes, but cross-process TOCTOU races are not fully
+  eliminated.
+- The planning provider is a data-privacy boundary even though it cannot control the browser.
+- Authentication and data-entry/form workflows are unsupported.
+- Generated tests are review artifacts, not automatically published or committed changes.

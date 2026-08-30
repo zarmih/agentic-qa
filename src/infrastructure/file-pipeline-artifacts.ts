@@ -120,10 +120,15 @@ export class FilePipelineArtifacts implements PipelineArtifactWriter, PipelineRe
       throw new ReportSourceError('pipelineId does not match sourceRunId.');
     }
 
-    const explorationFile = referenced(runDirectory, pipeline.artifacts.exploration);
-    const exploration = (await new FilePlanningArtifacts().loadExploration(explorationFile))
-      .exploration;
-    if (exploration.runId !== pipeline.sourceRunId) {
+    const exploration =
+      pipeline.artifacts.exploration === null
+        ? null
+        : (
+            await new FilePlanningArtifacts().loadExploration(
+              referenced(runDirectory, pipeline.artifacts.exploration),
+            )
+          ).exploration;
+    if (exploration !== null && exploration.runId !== pipeline.sourceRunId) {
       throw new ReportSourceError('Exploration and pipeline source run identifiers do not match.');
     }
 
@@ -196,6 +201,9 @@ export class FilePipelineArtifacts implements PipelineArtifactWriter, PipelineRe
     manifest: PipelineReportData['manifest'],
   ): Promise<void> {
     if (plan !== null) {
+      if (exploration === null) {
+        throw new ReportSourceError('A report plan cannot exist without exploration data.');
+      }
       const observation = await json(join(runDirectory, 'planning', 'observation.json'));
       const graph = await json(join(runDirectory, 'graph.json'));
       const stateGraph = await json(join(runDirectory, 'state-graph.json'));

@@ -228,7 +228,7 @@ export function loadPlanningConfig(
   const provider = overrides.provider ?? 'openai-compatible';
   if (provider !== 'openai-compatible') {
     throw new ConfigurationError(
-      `Unsupported reasoning provider "${provider}". Stage 4 supports openai-compatible.`,
+      `Unsupported reasoning provider "${provider}". Supported protocol: openai-compatible.`,
     );
   }
   const baseUrlValue = environment.AGENTIC_QA_LLM_BASE_URL?.trim();

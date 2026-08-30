@@ -26,6 +26,7 @@ import type {
   Clock,
   ExplorationArtifactStore,
   ExplorationBrowser,
+  ExplorationBrowserSession,
   RawPageLink,
   RunIdGenerator,
 } from './ports.js';
@@ -43,6 +44,19 @@ export interface ExploreApplicationOptions extends ExplorationLimits, Interactiv
 export interface ExplorationOutcome {
   readonly result: ExplorationResult;
   readonly artifactDirectory: string;
+}
+
+/** Preserves the prepared run location when browser startup fails. */
+export class ExplorationRunFailure extends Error {
+  public constructor(
+    public readonly runId: string,
+    public readonly startUrl: string,
+    public readonly artifactDirectory: string,
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : 'Exploration could not start.', { cause });
+    this.name = 'ExplorationRunFailure';
+  }
 }
 
 interface QueueEntry {
@@ -124,11 +138,16 @@ export class ExploreApplication {
     const truncatedEvidence = new Set<keyof MutableEvidence>();
     let pagesAttempted = 0;
 
-    const session = await this.browser.start({
-      headless: options.headless,
-      viewport: options.viewport,
-      tracePath: locations.tracePath,
-    });
+    let session: ExplorationBrowserSession;
+    try {
+      session = await this.browser.start({
+        headless: options.headless,
+        viewport: options.viewport,
+        tracePath: locations.tracePath,
+      });
+    } catch (error) {
+      throw new ExplorationRunFailure(runId, startUrl, locations.directory, error);
+    }
     const interactiveExplorer = options.interactive
       ? new InteractiveStateExplorer(session, this.artifacts, runId, {
           maxStates: options.maxStates,

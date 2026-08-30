@@ -5,7 +5,8 @@ real Chromium, asks a provider-neutral LLM only to propose a grounded test plan,
 through deterministic graph references, verifies reproducibility, generates reviewable
 Playwright regressions, and exports them only after explicit human approval.
 
-Current version: **0.8.0**. This is a pre-1.0 engineering release, not an npm-published package.
+Current version: **0.9.0**. This is a v1 release-candidate audit build, not an npm-published
+package and not a v1 release.
 
 ## What it can do
 
@@ -62,6 +63,9 @@ agentic-qa export artifacts/<run-id>/regressions/<generation-id>/manifest.json \
 
 The first command is a dry run and does not modify the target. Artifacts are stored in
 `artifacts/<run-id>/` by default and are intentionally ignored by Git.
+
+If Chromium is absent, browser commands fail with an installation hint instead of silently
+downloading a browser. Run `npx playwright install chromium` explicitly.
 
 ## Safety model
 
@@ -240,7 +244,7 @@ agentic-qa plan artifacts/<run-id>/exploration.json \
 ```
 
 The adapter uses the JSON chat-completions protocol. Compatibility with a particular hosted or
-local service depends on that service implementing the expected protocol; Stage 4 automated tests
+local service depends on that service implementing the expected protocol; automated adapter tests
 use only a controlled local fake endpoint and never make paid or public API calls.
 
 Planning follows a strict one-way boundary:
@@ -329,7 +333,7 @@ qa-plan.json (untrusted)
 ```
 
 Only `AUTOMATABLE` scenarios are eligible. `MANUAL_ONLY` and `UNSUPPORTED` scenarios remain in the
-report as `SKIPPED`. Stage 5 supports only `NAVIGATE` to an existing `pageId` and `CLICK` through an
+report as `SKIPPED`. Execution supports only `NAVIGATE` to an existing `pageId` and `CLICK` through an
 existing observed SAFE `actionId`; any unsupported step skips the whole scenario. Plan-provided
 URLs, CSS, XPath, text selectors, JavaScript, and natural-language instructions never become
 browser commands. Free-text objectives and expected outcomes are retained only as human context.
@@ -382,7 +386,7 @@ artifacts/<run-id>/
 `execution.json` schema 1.1 is the source of truth and includes a canonical SHA-256 result payload
 digest; Markdown is rendered deterministically without an LLM.
 Exit code `0` means no FAIL/BLOCKED/ERROR, `1` means an application mismatch or safety block was
-reported, and `2` means an execution/configuration error. Legacy Stage 4 plans with schema 1.0 have
+reported, and `2` means an execution/configuration error. Legacy plan schema 1.0 artifacts have
 no integrity metadata and are rejected with an explicit instruction to run `plan` again. Legacy
 execution schema 1.0 lacks result integrity and must be regenerated with `run` before verification.
 
@@ -403,7 +407,7 @@ execution.json (untrusted)
   → strict schema and payload-integrity validation
   → plan/exploration/observation/graph linkage validation
   → deterministic candidate extraction
-  → isolated Stage 5 scenario reruns
+  → isolated constrained scenario reruns
   → failure/evidence signature analysis
   → reproducibility, severity, and confidence policy
   → findings and reports
@@ -431,7 +435,7 @@ attempts. Every attempt calls the existing constrained executor for exactly one 
 It starts a fresh Playwright browser and BrowserContext, so cookies, local/session storage,
 IndexedDB, cache, permissions, pages, and service-worker state do not cross attempt boundaries.
 The same runtime semantic drift, form, scope, action-risk, locator-uniqueness, and graph assertion
-checks apply; verification has no mechanism to weaken Stage 5 safety.
+checks apply; verification has no mechanism to weaken execution safety.
 
 Signatures retain both raw and normalized forms. Normalization is deliberately narrow: obvious
 UUIDs, ISO timestamps, long request/run identifiers, localhost ports, fragments, and query order
@@ -443,18 +447,18 @@ Severity is conservative and deterministic. Confirmed/probable HTTP 5xx findings
 for a `CRITICAL`/`HIGH` source scenario and otherwise `MEDIUM`;
 page errors and relevant failed requests are `MEDIUM`; structural mismatches are normally `MEDIUM`
 and reach `HIGH` only for a stable `CRITICAL` source scenario; console-only errors are capped at
-`LOW`; not-reproduced and inconclusive signals are `INFO`. Stage 4 priority is only one input and
+`LOW`; not-reproduced and inconclusive signals are `INFO`. Plan priority is only one input and
 never establishes business impact by itself. Confidence is `VERY_HIGH` for confirmed, `HIGH` for
 probable, `MEDIUM` for flaky, `HIGH`/`MEDIUM` for not-reproduced depending on valid sample count,
 and `LOW` for inconclusive findings.
 
 Runtime evidence and screenshots are associated with findings, but association is explicitly not
-presented as causation. Stage 6 performs no root-cause analysis and makes no visual/pixel verdict.
+presented as causation. Verification performs no root-cause analysis and makes no visual/pixel verdict.
 Canonical SHA-256 digests detect changed source artifacts and bind plan, observation, graphs,
 exploration, and execution payloads together. They provide integrity, not cryptographic author
 authenticity or provenance; there is no signing key.
 
-Each invocation creates a new verification tree and preserves per-attempt Stage 5 reports:
+Each invocation creates a new verification tree and preserves per-attempt execution reports:
 
 ```text
 artifacts/<run-id>/
@@ -480,9 +484,9 @@ artifacts/<run-id>/
 
 `verification.json` schema 1.1 contains candidates, attempts, signature distributions, variance, timings,
 warnings, findings, and source digests. `findings.json` is the standalone defect-finding source of
-truth. Both Stage 6 result artifacts now carry canonical payload integrity and a verification-to-
+truth. Both verification result artifacts carry canonical payload integrity and a verification-to-
 findings digest binding; legacy schema 1.0 artifacts must be regenerated with `verify` before
-Stage 7 will accept them. `verification.md` is rendered locally without an LLM. Exit code `0` means no
+regression generation accepts them. `verification.md` is rendered locally without an LLM. Exit code `0` means no
 confirmed/probable/flaky finding, `1` means at least one such finding exists, and `2` means a
 verification/configuration/infrastructure failure or global verification timeout occurred.
 
@@ -501,7 +505,7 @@ Generation is a deterministic, provider-free pipeline:
 findings.json (untrusted)
   → schema, payload, verdict, and full source-linkage validation
   → confirmed-finding eligibility policy
-  → Stage 5 graph-backed scenario compiler
+  → graph-backed scenario compiler
   → typed regression IR
   → unique semantic locator + state assertion compiler
   → escaped TypeScript renderer
@@ -516,7 +520,7 @@ disabled `test.fixme` spec only with `--include-flaky`. `NOT_REPRODUCED`, `INCON
 findings are review-only unless a future stage defines an equally strong positive contract.
 
 Generated actions are limited to source-graph `NAVIGATE` and observed SAFE `CLICK` edges. The
-compiler reuses Stage 5 sequence and replay validation, re-applies action-risk/form/scope policy,
+compiler reuses execution sequence and replay validation, re-applies action-risk/form/scope policy,
 and requires a unique semantic locator. Supported locator output is `getByTestId`, `getByRole`,
 `getByLabel`, stable ID, or exact `getByText`; indexed matches, XPath, broad CSS, selectors supplied
 by findings, and arbitrary URLs are rejected. Form interaction, credentials, authentication,
@@ -548,7 +552,7 @@ artifacts/<run-id>/
 
 `manifest.json` schema 1.1 records generated, fixme, review-only, unsupported, over-limit, and duplicate
 outcomes, source-chain digests, spec digests, assertions, limits, and a canonical payload digest.
-Stage 7 schema 1.0 manifests remain exportable only after the entire source chain, deterministic
+Legacy manifest schema 1.0 remains exportable only after the entire source chain, deterministic
 compilation, source bytes, assertions, and per-file digests are revalidated; legacy input is never
 silently trusted. Generation exit code `0`
 means generation completed without eligible review/unsupported items, `1` means artifacts were
@@ -581,6 +585,11 @@ artifact infrastructure failures do stop the flow. `pipeline.json` records every
 `COMPLETED_WITH_FINDINGS`, `FAILED`, or `NOT_RUN`, along with timings, summaries, errors, and
 relative artifact references. Final status is `COMPLETE_NO_DEFECTS`, `COMPLETE_WITH_FINDINGS`,
 `COMPLETE_WITH_REGRESSIONS`, or `FAILED`.
+
+The orchestration record is created with the exploration run directory before Chromium starts.
+When browser startup fails, schema 1.1 `pipeline.json` and a failure `report.html` still record the
+error and mark later stages `NOT_RUN`. If that directory itself cannot be created, the CLI reports
+`ARTIFACT_WRITE_FAILED`; there is deliberately no pretend artifact location.
 
 Pipeline never exports into another repository. Generation remains the terminal automatic stage;
 export is always a separate human decision.
@@ -676,8 +685,8 @@ agentic-qa report artifacts/<run-id>
 | `export`                     | clean preview/apply                 | conflicts, warnings, review, or validation failure | source/target/config failure         |
 | `pipeline`                   | complete with no defect signal      | complete with findings/regressions                 | failed infrastructure stage          |
 
-Commander usage errors return non-zero and print help. Existing Stage 1–4 commands retain their
-historical exit behavior for compatibility.
+Commander usage errors return non-zero and print help. Existing commands retain their historical
+exit behavior for compatibility.
 
 ## Architecture
 
@@ -717,12 +726,17 @@ exploration-to-planning-to-execution-to-verification-to-generation pipeline and 
 target export. Generated UI, navigation, and HTTP specs are compiled and run against controlled
 bug/healthy modes with real Chromium, without public internet or API credentials.
 
-## Roadmap
+## Release-candidate documentation
 
-The next milestone is Stage 9: final v1.0 readiness audit. It should focus on public API/schema
-stability, cross-platform packaging/install matrices, documentation and threat-model review,
-performance/flakiness baselines, release automation design, and a go/no-go decision. It must not
-publish, tag, or create a release without a separate explicit approval.
+- [v1 public contract and exit codes](docs/V1_CONTRACT.md)
+- [artifact schema compatibility](docs/SCHEMA_COMPATIBILITY.md)
+- [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md)
+- [performance baseline](docs/PERFORMANCE.md)
+- [v1 release checklist](docs/V1_RELEASE_CHECKLIST.md)
+- [historical changelog](CHANGELOG.md)
+
+The next step after this audit is an explicit human-authorized v1 release operation. It must not
+publish npm, create a tag, or create a GitHub Release without that separate approval.
 
 ## License
 

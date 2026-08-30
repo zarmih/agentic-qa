@@ -1,4 +1,5 @@
 import type { ExplorationResult, PageNode } from '../domain/exploration.js';
+import { compareStrings } from '../domain/determinism.js';
 import type { ActionEdge, SafetyAuditEntry, StateNode } from '../domain/interaction.js';
 import type {
   PlanningBlockedCandidateObservation,
@@ -169,7 +170,7 @@ export class PlanningObservationCompiler {
         return (
           priority(left) - priority(right) ||
           left.depth - right.depth ||
-          left.id.localeCompare(right.id)
+          compareStrings(left.id, right.id)
         );
       });
     const states = rankedStates
@@ -201,7 +202,7 @@ export class PlanningObservationCompiler {
           if (edge.urlChanged) return 1;
           return 2;
         };
-        return priority(left) - priority(right) || left.id.localeCompare(right.id);
+        return priority(left) - priority(right) || compareStrings(left.id, right.id);
       })
       .slice(0, this.limits.maxTransitionsForPlanning)
       .map((edge): PlanningTransitionObservation => ({
@@ -227,7 +228,8 @@ export class PlanningObservationCompiler {
       .sort((left, right) => {
         const rank = { DESTRUCTIVE: 0, CAUTION: 1, UNKNOWN: 2 } as const;
         return (
-          rank[left.classification] - rank[right.classification] || left.id.localeCompare(right.id)
+          rank[left.classification] - rank[right.classification] ||
+          compareStrings(left.id, right.id)
         );
       });
     const eligibleBlockedCandidates = allBlockedCandidates.filter((entry) =>

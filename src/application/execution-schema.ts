@@ -179,7 +179,7 @@ export function parseSavedExecution(value: unknown): ExecutionRun {
     (value as { readonly schemaVersion?: unknown }).schemaVersion === '1.0'
   ) {
     throw new SavedExecutionValidationError([
-      'schemaVersion: legacy Stage 5 executions have no result integrity digest; run the plan again',
+      'schemaVersion: legacy executions have no result integrity digest; run the plan again',
     ]);
   }
   const result = executionRunSchema.safeParse(value);

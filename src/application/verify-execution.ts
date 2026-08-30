@@ -6,6 +6,7 @@ import type {
   StepExecution,
 } from '../domain/execution.js';
 import type { Viewport } from '../domain/inspection.js';
+import { compareStrings } from '../domain/determinism.js';
 import type {
   DefectFinding,
   DefectSignature,
@@ -72,7 +73,7 @@ function relevantStep(
 
 function uniqueSignatures(values: readonly DefectSignature[]): readonly DefectSignature[] {
   return [...new Map(values.map((value) => [value.hash, value])).values()].sort((left, right) =>
-    left.hash.localeCompare(right.hash),
+    compareStrings(left.hash, right.hash),
   );
 }
 

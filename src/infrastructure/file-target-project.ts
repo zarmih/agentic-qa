@@ -105,6 +105,7 @@ async function boundedText(path: string): Promise<string | null> {
 async function git(root: string, args: readonly string[]): Promise<string | null> {
   try {
     const result = await execFileAsync('git', [...args], {
+      shell: false,
       cwd: root,
       timeout: 5_000,
       maxBuffer: MAX_COMMAND_OUTPUT,
@@ -369,6 +370,7 @@ export class FileTargetProject implements TargetProjectProbe, TargetExportFilesy
     const started = Date.now();
     try {
       const result = await execFileAsync(process.execPath, args, {
+        shell: false,
         cwd: rootPath,
         timeout: timeoutMs,
         maxBuffer: MAX_COMMAND_OUTPUT,

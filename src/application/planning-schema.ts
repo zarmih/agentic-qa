@@ -293,7 +293,7 @@ export function parseSavedQaPlan(value: unknown): QaPlan {
     (value as { readonly schemaVersion?: unknown }).schemaVersion === '1.0'
   ) {
     throw new SavedPlanValidationError([
-      'schemaVersion: legacy Stage 4 plans have no source integrity metadata; run plan again',
+      'schemaVersion: legacy QA plans have no source integrity metadata; run plan again',
     ]);
   }
   const result = qaPlanSchema.safeParse(value);

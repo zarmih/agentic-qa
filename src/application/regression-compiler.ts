@@ -116,7 +116,7 @@ export class RegressionCompiler {
     if (compiledScenario?.skip !== null) {
       return this.unsupported(
         compiledScenario?.skip?.reason ??
-          'The scenario cannot be compiled by Stage 5 safety rules.',
+          'The scenario cannot be compiled by the execution safety rules.',
       );
     }
     const instruction = compiledScenario.instructions.find(

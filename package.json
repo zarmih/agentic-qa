@@ -1,6 +1,6 @@
 {
   "name": "agentic-qa",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Safe browser QA exploration, planning, verification, regression generation, and human-approved export.",
   "type": "module",
   "bin": {
@@ -27,7 +27,8 @@
     "generate": "tsx src/cli/index.ts generate",
     "export": "tsx src/cli/index.ts export",
     "pipeline": "tsx src/cli/index.ts pipeline",
-    "report": "tsx src/cli/index.ts report"
+    "report": "tsx src/cli/index.ts report",
+    "release:package-smoke": "node scripts/release-package-smoke.mjs"
   },
   "keywords": [
     "qa",
@@ -46,7 +47,6 @@
   "homepage": "https://github.com/zarmih/agentic-qa#readme",
   "license": "MIT",
   "dependencies": {
-    "@types/node": "^24.13.3",
     "commander": "^15.0.0",
     "picocolors": "^1.1.1",
     "playwright": "^1.62.1",
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
+    "@types/node": "^24.13.3",
     "eslint": "^10.9.1",
     "tsx": "^4.23.0",
     "typescript-eslint": "^8.68.0",

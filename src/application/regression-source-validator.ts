@@ -1,4 +1,5 @@
 import type { DefectSignature } from '../domain/verification.js';
+import { compareStrings } from '../domain/determinism.js';
 import { RegressionIntegrityError } from './errors.js';
 import type { LoadedRegressionSource } from './regression-ports.js';
 import { canonicalJson, sha256Digest } from './source-integrity.js';
@@ -17,7 +18,7 @@ export interface ValidatedRegressionSource {
 
 function uniqueSignatures(values: readonly DefectSignature[]): readonly DefectSignature[] {
   return [...new Map(values.map((value) => [value.hash, value])).values()].sort((left, right) =>
-    left.hash.localeCompare(right.hash),
+    compareStrings(left.hash, right.hash),
   );
 }
 

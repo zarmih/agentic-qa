@@ -47,6 +47,7 @@ function runGeneratedSpec(specFile: string) {
         '--timeout=10000',
       ],
       {
+        shell: false,
         cwd: projectRoot,
         env: {
           ...process.env,
