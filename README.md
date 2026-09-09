@@ -735,8 +735,8 @@ bug/healthy modes with real Chromium, without public internet or API credentials
 - [v1 release checklist](docs/V1_RELEASE_CHECKLIST.md)
 - [historical changelog](CHANGELOG.md)
 
-The next step after this audit is an explicit human-authorized v1 release operation. It must not
-publish npm, create a tag, or create a GitHub Release without that separate approval.
+Version 1.0.0 is already released on GitHub (tag and GitHub Release, 2026-08-30). npm is still
+unpublished. Publishing to npm needs a separate approval and must not happen as part of this note.
 
 ## License
 
